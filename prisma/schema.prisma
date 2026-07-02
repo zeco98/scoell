@@ -1,0 +1,377 @@
+// ============================================================================
+// مخطط قاعدة بيانات «منارة» — مشتق من interfaces في mock.ts وموسّع للنماذج الكاملة
+//
+// ملاحظة معمارية: التطوير المحلي يعمل بـ SQLite (Docker غير متوفر على جهاز
+// التطوير)، لذا القيم المعدودة (roles/statuses) حقول String تُضبط قيمها عبر
+// zod في @manarah/shared وطبقة الخدمات. للإنتاج: بدّل provider إلى
+// "postgresql" وحوّل حقول String المعلَّمة بتعليق enum: إلى enums حقيقية —
+// docker-compose.yml في جذر المستودع جاهز.
+// ============================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// المؤسسة (Tenant) — school/institute/kindergarten
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  city      String?
+  plan      String   @default("Basic") // enum: Basic | Pro | Enterprise
+  status    String   @default("trial") // enum: active | trial | suspended
+  branches  Int      @default(1)
+  // JSON نصي (SQLite): { blockResultsOnDebt, autoAbsenceNotify, easternNumerals, darkMode, logoFileId }
+  settings  String   @default("{}")
+  createdAt DateTime @default(now())
+
+  users       User[]
+  sections    Section[]
+  students    Student[]
+  admissions  Admission[]
+  feeRecords  FeeRecord[]
+  payments    Payment[]
+  discounts   Discount[]
+  exams       Exam[]
+  messages    Message[]
+  employees   Employee[]
+  routes      TransportRoute[]
+  aiRequests  AiRequest[]
+}
+
+model User {
+  id                 String    @id @default(cuid())
+  tenantId           String? // null = مستوى المنصة (SUPER_ADMIN / AUDITOR)
+  email              String    @unique
+  passwordHash       String
+  name               String
+  role               String // enum: الأدوار التسعة في @manarah/shared
+  avatarColor        String    @default("#0b6e63")
+  phone              String?
+  failedAttempts     Int       @default(0)
+  lockedUntil        DateTime?
+  mustChangePassword Boolean   @default(false)
+  createdAt          DateTime  @default(now())
+
+  tenant        Tenant?          @relation(fields: [tenantId], references: [id])
+  refreshTokens RefreshToken[]
+  notifications Notification[]
+  wards         Student[]        @relation("guardian") // أبناء ولي الأمر
+  driverRoutes  TransportRoute[] @relation("driver")
+
+  @@index([tenantId, role])
+}
+
+model RefreshToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  family    String // عائلة التدوير — كشف إعادة الاستخدام يبطل العائلة كلها
+  revokedAt DateTime?
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, family])
+}
+
+// الشعبة الدراسية
+model Section {
+  id        String  @id @default(cuid())
+  tenantId  String
+  stage     String // مثال: الرابع علمي
+  name      String // مثال: أ
+  teacherId String? // مدرّس الصف
+
+  tenant     Tenant             @relation(fields: [tenantId], references: [id])
+  students   Student[]
+  attendance AttendanceRecord[]
+  exams      Exam[]
+
+  @@unique([tenantId, stage, name])
+}
+
+model Student {
+  id             String    @id @default(cuid())
+  tenantId       String
+  code           String // رقم العرض st1000
+  name           String
+  gender         String // enum: MALE | FEMALE
+  birthDate      DateTime?
+  sectionId      String?
+  guardianName   String
+  guardianPhone  String
+  guardianUserId String? // ربط بحساب PARENT
+  healthNotes    String?
+  address        String?
+  status         String    @default("active") // enum: active|suspended|graduated|withdrawn
+  routeId        String?
+  enrolledAt     DateTime  @default(now())
+  archivedAt     DateTime? // soft delete
+
+  tenant      Tenant             @relation(fields: [tenantId], references: [id])
+  section     Section?           @relation(fields: [sectionId], references: [id])
+  guardian    User?              @relation("guardian", fields: [guardianUserId], references: [id])
+  route       TransportRoute?    @relation(fields: [routeId], references: [id])
+  attendance  AttendanceRecord[]
+  feeRecords  FeeRecord[]
+  payments    Payment[]
+  discounts   Discount[]
+  examResults ExamResult[]
+  documents   FileAsset[]
+
+  @@unique([tenantId, code])
+  @@index([tenantId, status])
+  @@index([tenantId, name])
+}
+
+model Admission {
+  id                 String    @id @default(cuid())
+  tenantId           String
+  applicantName      String
+  stageApplied       String
+  guardianName       String
+  guardianPhone      String
+  notes              String?
+  docs               Int       @default(0)
+  stage              String    @default("new") // enum: new|reviewing|interview|accepted|rejected
+  rejectReason       String?
+  convertedStudentId String?
+  submittedAt        DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, stage])
+}
+
+model AttendanceRecord {
+  id           String   @id @default(cuid())
+  tenantId     String
+  studentId    String
+  sectionId    String
+  date         String // YYYY-MM-DD — يوم دراسي
+  mark         String // enum: present|absent|late|early
+  note         String?
+  recordedById String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  student Student @relation(fields: [studentId], references: [id])
+  section Section @relation(fields: [sectionId], references: [id])
+
+  @@unique([studentId, date])
+  @@index([tenantId, sectionId, date])
+}
+
+model FeeRecord {
+  id        String   @id @default(cuid())
+  tenantId  String
+  studentId String
+  plan      String // قسط سنوي | ٣ أقساط | ٤ أقساط
+  total     Int // دينار عراقي
+  paid      Int      @default(0)
+  dueDate   String // YYYY-MM-DD
+  status    String   @default("overdue") // enum: paid|partial|overdue — يُحتسب عند كل دفعة
+  createdAt DateTime @default(now())
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  student  Student   @relation(fields: [studentId], references: [id])
+  payments Payment[]
+
+  @@index([tenantId, status])
+}
+
+// سند القبض — ترقيم تسلسلي لا يقبل الفراغات لكل مؤسسة/سنة
+model Payment {
+  id           String    @id @default(cuid())
+  tenantId     String
+  year         Int
+  seq          Int
+  receiptNo    String // RC-<year>-<seq> — يُشتق في المعاملة نفسها
+  feeRecordId  String
+  studentId    String
+  amount       Int
+  method       String // enum: CASH|TRANSFER|CARD
+  note         String?
+  receivedById String
+  receivedBy   String // اسم المحصّل وقت العملية (denormalized للسند المطبوع)
+  voidedAt     DateTime? // الإلغاء المنطقي — لا حذف نهائي إلا SUPER_ADMIN
+  createdAt    DateTime  @default(now())
+
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  feeRecord FeeRecord @relation(fields: [feeRecordId], references: [id])
+  student   Student   @relation(fields: [studentId], references: [id])
+
+  @@unique([tenantId, year, seq])
+  @@unique([tenantId, receiptNo])
+}
+
+// عدّاد السندات — يضمن التسلسل داخل معاملة واحدة
+model ReceiptCounter {
+  tenantId String
+  year     Int
+  value    Int    @default(0)
+
+  @@id([tenantId, year])
+}
+
+model Discount {
+  id          String   @id @default(cuid())
+  tenantId    String
+  studentId   String
+  percent     Int
+  reason      String
+  grantedById String
+  createdAt   DateTime @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id])
+  student Student @relation(fields: [studentId], references: [id])
+}
+
+model Exam {
+  id          String   @id @default(cuid())
+  tenantId    String
+  name        String // النهائي — الرابع علمي / أ
+  subject     String
+  sectionId   String
+  year        String // 2025-2026
+  createdById String
+  createdAt   DateTime @default(now())
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id])
+  section Section      @relation(fields: [sectionId], references: [id])
+  results ExamResult[]
+}
+
+model ExamResult {
+  id        String   @id @default(cuid())
+  examId    String
+  studentId String
+  monthly   Int // من 20
+  midterm   Int // من 30
+  finalExam Int // من 50
+  total     Int // محسوب
+  grade     String // امتياز | جيد جدًا | ...
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  exam    Exam    @relation(fields: [examId], references: [id])
+  student Student @relation(fields: [studentId], references: [id])
+
+  @@unique([examId, studentId])
+}
+
+model Message {
+  id           String    @id @default(cuid())
+  tenantId     String
+  title        String
+  body         String
+  channel      String // enum: IN_APP|SMS|WHATSAPP
+  audienceKind String // ALL_PARENTS|SECTION|INDIVIDUALS|TEACHERS|STUDENTS|ABSENTEES
+  audienceMeta String    @default("{}") // JSON نصي: sectionId / userIds / وصف العرض
+  status       String    @default("draft") // enum: sent|scheduled|draft|failed
+  scheduledAt  DateTime?
+  sentAt       DateTime?
+  createdById  String
+  createdAt    DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  title     String
+  body      String
+  kind      String    @default("general") // absence|payment|admission|exam|general
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+}
+
+// سجل التدقيق — append-only، لا يوجد أي endpoint حذف/تعديل له
+model AuditLog {
+  id        String   @id @default(cuid())
+  tenantId  String?
+  userId    String?
+  userName  String
+  action    String
+  entity    String
+  entityId  String
+  before    String? // JSON نصي
+  after     String? // JSON نصي
+  ip        String?
+  userAgent String?
+  severity  String   @default("info") // enum: info|warning|critical
+  createdAt DateTime @default(now())
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entity, entityId])
+}
+
+model AiRequest {
+  id           String    @id @default(cuid())
+  tenantId     String
+  kind         String // student_report|parent_message|exam_questions|attendance_summary
+  prompt       String
+  output       String
+  status       String    @default("draft") // enum: draft|approved|rejected
+  createdById  String
+  approvedById String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+}
+
+// الموارد البشرية — MVP مبسّط
+model Employee {
+  id           String    @id @default(cuid())
+  tenantId     String
+  name         String
+  title        String // معلم رياضيات، إداري، سائق...
+  phone        String?
+  contractType String    @default("full_time") // full_time|part_time|contract
+  salary       Int?
+  hiredAt      DateTime  @default(now())
+  status       String    @default("active") // active|on_leave|terminated
+  userId       String? // ربط بحساب دخول إن وُجد
+
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+}
+
+// النقل المدرسي — عرض مبدئي لدور السائق
+model TransportRoute {
+  id           String  @id @default(cuid())
+  tenantId     String
+  name         String // مسار الكرادة صباحي
+  driverUserId String?
+
+  tenant   Tenant    @relation(fields: [tenantId], references: [id])
+  driver   User?     @relation("driver", fields: [driverUserId], references: [id])
+  students Student[]
+}
+
+// تخزين الملفات — abstraction محلي الآن، S3-ready
+model FileAsset {
+  id         String   @id @default(cuid())
+  tenantId   String?
+  studentId  String?
+  fileName   String
+  mimeType   String
+  size       Int
+  storageKey String // مسار محلي الآن؛ مفتاح S3 لاحقًا
+  uploadedBy String
+  createdAt  DateTime @default(now())
+
+  student Student? @relation(fields: [studentId], references: [id])
+}

@@ -8,7 +8,7 @@ build/
 coverage/
 .DS_Store
 Thumbs.db
-apps/api/prisma/dev.db
-apps/api/prisma/dev.db-journal
+prisma/dev.db
+prisma/dev.db-journal
 apps/desktop/src-tauri/target/
 releases/

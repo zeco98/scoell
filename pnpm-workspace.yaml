@@ -17,3 +17,5 @@ allowBuilds:
   '@prisma/client': true
   '@prisma/engines': true
   prisma: true
+  '@nestjs/core': true
+  '@scarf/scarf': false

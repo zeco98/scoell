@@ -1,0 +1,177 @@
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import type { UpsertExamResultDto } from "@manarah/shared";
+import { PrismaService } from "../prisma/prisma.service";
+import { AuditService, type AuditContext } from "../audit/audit.service";
+import { tenantWhere, requireTenant, type AuthUser } from "../common/types";
+import { renderReportCardHtml } from "../pdf/templates";
+
+function gradeOf(total: number): string {
+  return total >= 90 ? "امتياز" : total >= 80 ? "جيد جدًا" : total >= 70 ? "جيد" : total >= 60 ? "متوسط" : total >= 50 ? "مقبول" : "راسب";
+}
+
+@Injectable()
+export class ExamsService {
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly audit: AuditService,
+  ) {}
+
+  list(user: AuthUser) {
+    return this.prisma.exam.findMany({
+      where: tenantWhere(user),
+      include: { section: true, _count: { select: { results: true } } },
+      orderBy: { createdAt: "desc" },
+    });
+  }
+
+  async create(
+    user: AuthUser,
+    dto: { name: string; subject: string; sectionId: string; year: string },
+    ctx: AuditContext,
+  ) {
+    const tenantId = requireTenant(user);
+    const section = await this.prisma.section.findFirst({ where: { id: dto.sectionId, tenantId } });
+    if (!section) throw new BadRequestException("الشعبة غير موجودة");
+    const exam = await this.prisma.exam.create({
+      data: { tenantId, name: dto.name, subject: dto.subject, sectionId: dto.sectionId, year: dto.year, createdById: user.id },
+      include: { section: true },
+    });
+    await this.audit.log({
+      user,
+      action: `إنشاء امتحان: ${dto.name} — ${dto.subject} (${section.stage}/${section.name})`,
+      entity: "Exam",
+      entityId: exam.id,
+      after: { name: dto.name, subject: dto.subject },
+      ctx,
+    });
+    return exam;
+  }
+
+  /** نتائج امتحان مرتبة + حجب عند الديون للطالب/ولي الأمر حسب سياسة المؤسسة */
+  async results(user: AuthUser, examId: string) {
+    const exam = await this.prisma.exam.findFirst({
+      where: { id: examId, ...tenantWhere(user) },
+      include: { section: true, tenant: true },
+    });
+    if (!exam) throw new NotFoundException("الامتحان غير موجود");
+
+    let results = await this.prisma.examResult.findMany({
+      where: { examId },
+      include: { student: { select: { id: true, name: true, code: true, guardianUserId: true } } },
+      orderBy: { total: "desc" },
+    });
+
+    // سياسة حجب النتائج عند الديون — تُطبَّق server-side على أدوار العرض
+    if (user.role === "PARENT" || user.role === "STUDENT") {
+      const settings = JSON.parse(exam.tenant.settings || "{}");
+      results = results.filter((r) =>
+        user.role === "PARENT" ? r.student.guardianUserId === user.id : true,
+      );
+      if (settings.blockResultsOnDebt) {
+        const ids = results.map((r) => r.studentId);
+        const fees = await this.prisma.feeRecord.groupBy({
+          by: ["studentId"],
+          where: { studentId: { in: ids } },
+          _sum: { total: true, paid: true },
+        });
+        const inDebt = new Set(
+          fees.filter((f) => (f._sum.total ?? 0) > (f._sum.paid ?? 0)).map((f) => f.studentId),
+        );
+        results = results.map((r) =>
+          inDebt.has(r.studentId)
+            ? { ...r, monthly: -1, midterm: -1, finalExam: -1, total: -1, grade: "محجوبة لوجود ذمة مالية" }
+            : r,
+        );
+      }
+    }
+
+    return {
+      exam,
+      results: results.map((r, i) => ({ ...r, rank: r.total >= 0 ? i + 1 : null })),
+    };
+  }
+
+  /** إدخال/تعديل درجات دفعة واحدة — كل تعديل يسجَّل بقيمته القديمة والجديدة */
+  async upsertResults(user: AuthUser, examId: string, rows: UpsertExamResultDto[], ctx: AuditContext) {
+    const tenantId = requireTenant(user);
+    const exam = await this.prisma.exam.findFirst({ where: { id: examId, tenantId } });
+    if (!exam) throw new NotFoundException("الامتحان غير موجود");
+
+    const existing = await this.prisma.examResult.findMany({ where: { examId } });
+    const existingMap = new Map(existing.map((r) => [r.studentId, r]));
+
+    let created = 0;
+    let updated = 0;
+    for (const row of rows) {
+      const total = row.monthly + row.midterm + row.finalExam;
+      const grade = gradeOf(total);
+      const prev = existingMap.get(row.studentId);
+      if (prev) {
+        if (prev.monthly === row.monthly && prev.midterm === row.midterm && prev.finalExam === row.finalExam) continue;
+        await this.prisma.examResult.update({
+          where: { id: prev.id },
+          data: { monthly: row.monthly, midterm: row.midterm, finalExam: row.finalExam, total, grade },
+        });
+        const student = await this.prisma.student.findUnique({ where: { id: row.studentId }, select: { name: true } });
+        await this.audit.log({
+          user,
+          tenantId,
+          action: `تعديل درجة ${student?.name ?? row.studentId} في ${exam.name} (من ${prev.total} إلى ${total})`,
+          entity: "ExamResult",
+          entityId: prev.id,
+          before: { monthly: prev.monthly, midterm: prev.midterm, finalExam: prev.finalExam, total: prev.total },
+          after: { monthly: row.monthly, midterm: row.midterm, finalExam: row.finalExam, total },
+          severity: "warning",
+          ctx,
+        });
+        updated++;
+      } else {
+        const result = await this.prisma.examResult.create({
+          data: { examId, studentId: row.studentId, monthly: row.monthly, midterm: row.midterm, finalExam: row.finalExam, total, grade },
+        });
+        await this.audit.log({
+          user,
+          tenantId,
+          action: `إدخال درجة جديدة في ${exam.name}`,
+          entity: "ExamResult",
+          entityId: result.id,
+          after: { total, grade },
+          ctx,
+        });
+        created++;
+      }
+    }
+    return { ok: true, created, updated };
+  }
+
+  /** كشف درجات الطالب (A4 print-ready بهوية منارة) */
+  async reportCardHtml(user: AuthUser, examId: string, studentId: string) {
+    const { exam, results } = await this.results(user, examId);
+    const mine = results.find((r) => r.studentId === studentId);
+    if (!mine) throw new NotFoundException("لا توجد نتيجة لهذا الطالب");
+    if (mine.total < 0) throw new BadRequestException("النتيجة محجوبة لوجود ذمة مالية — راجع الإدارة");
+    const student = await this.prisma.student.findUnique({
+      where: { id: studentId },
+      include: { section: true },
+    });
+    return renderReportCardHtml({
+      tenantName: exam.tenant.name,
+      examName: exam.name,
+      year: exam.year,
+      student: { name: student!.name, code: student!.code, section: student!.section },
+      rank: mine.rank ?? 0,
+      classSize: results.length,
+      rows: [
+        {
+          subject: exam.subject,
+          monthly: mine.monthly,
+          midterm: mine.midterm,
+          finalExam: mine.finalExam,
+          total: mine.total,
+          grade: mine.grade,
+        },
+      ],
+      average: mine.total,
+    });
+  }
+}
