@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "صلاحيات النافذة الرئيسية لتطبيق منارة",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "core:window:allow-set-title",
+    "notification:default",
+    "updater:default",
+    "sql:default",
+    "sql:allow-execute",
+    "stronghold:default"
+  ]
+}

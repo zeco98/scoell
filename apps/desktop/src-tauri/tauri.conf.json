@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "منارة",
+  "version": "0.1.0",
+  "identifier": "io.manarah.desktop",
+  "build": {
+    "beforeDevCommand": "pnpm --filter @manarah/web dev",
+    "devUrl": "http://localhost:5173",
+    "beforeBuildCommand": "pnpm --filter @manarah/web build",
+    "frontendDist": "../../web/dist"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "منارة — منصة إدارة المدارس والمعاهد",
+        "width": 1280,
+        "height": 800,
+        "minWidth": 1024,
+        "minHeight": 640,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src 'self' http://localhost:3001 https://api.manarah.io; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis", "msi"],
+    "icon": ["icons/icon.ico"],
+    "windows": {
+      "nsis": {
+        "languages": ["Arabic", "English"],
+        "displayLanguageSelector": true
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "endpoints": ["https://releases.manarah.io/desktop/{{target}}/{{current_version}}"],
+      "pubkey": "UPDATER_PUBKEY_PLACEHOLDER — يُولَّد عبر tauri signer generate"
+    }
+  }
+}
