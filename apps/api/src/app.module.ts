@@ -25,8 +25,11 @@ import { UsersModule } from "./users/users.module";
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    // حد عام 300 طلب/دقيقة، وauth له حدود أشد في الـ controller
-    ThrottlerModule.forRoot([{ ttl: 60000, limit: 300 }]),
+    // حد عام 300 طلب/دقيقة، وauth له حدود أشد في الـ controller (معطّل في الاختبارات)
+    ThrottlerModule.forRoot({
+      throttlers: [{ ttl: 60000, limit: 300 }],
+      skipIf: () => process.env.NODE_ENV === "test",
+    }),
     PrismaModule,
     AuditModule,
     AuthModule,
