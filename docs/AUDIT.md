@@ -150,3 +150,15 @@ HR                     → موظفو مؤسسته (CRUD)
 | — | helmet بـ CSP صريح | `main.ts` | — |
 
 **اختبارات e2e:** 12/12 خضراء (8 أصلية + 4 أمنية جديدة).
+
+### المحطة 3 — متانة Backend / DB / API (2026-07-03) ✅
+| البند | الإصلاح | الملف | تحقّق |
+|---|---|---|---|
+| M4 | مخططات zod لنقاط الكتابة (حالة الطالب/المؤسسة، نقل شعبة، سبب الإلغاء) | `students.controller.ts`, `tenants.controller.ts`, `fees.controller.ts` | اختبار #13 (400 + شكل موحّد) + تحقّق حيّ |
+| L2 | سقف أمان للقوائم غير المقسّمة (admissions 500، exams 200) | `admissions.service.ts`, `exams.service.ts` | تحقّق حيّ |
+| L3 | فهارس `tenantId`/FK لـ Exam/ExamResult/Message/AiRequest/Employee/TransportRoute/FileAsset/Discount | `schema.prisma` | `prisma db push` نجح |
+| L5 | توحيد `auditCtx` و`computeFeeStatus` في `common/types.ts` — إزالة 8 تعريفات مكررة | كل المتحكمات + `fees.service.ts` | البناء نظيف |
+| L8 | `voidPayment` يستعلم ضمن `tenantWhere` دفاعيًا (لا يعتمد الدور وحده) | `fees.service.ts` | — |
+| L7 | (توصية) توثيق Swagger الغني مؤجَّل — التوثيق الوظيفي بكل المسارات والوسوم وbearer موجود على `/api/docs` | — | — |
+
+**اختبارات e2e:** 13/13 خضراء. البناء وtypecheck الويب نظيفان، صفر أزرار ميتة.

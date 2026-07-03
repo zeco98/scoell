@@ -1,6 +1,18 @@
 import type { Role } from "@manarah/shared";
 import type { Request } from "express";
 
+/** سياق التدقيق من الطلب — يُستخرج مرة واحدة بدل تكراره في كل متحكم */
+export function auditCtx(req: Request): { ip?: string; userAgent?: string } {
+  return { ip: req.ip, userAgent: req.headers["user-agent"] as string | undefined };
+}
+
+/** احتساب حالة القسط — مصدر واحد يمنع تضارب المنطق بين الخدمات */
+export function computeFeeStatus(total: number, paid: number, dueDate: string): "paid" | "partial" | "overdue" {
+  if (paid >= total) return "paid";
+  if (paid > 0) return "partial";
+  return dueDate < new Date().toISOString().slice(0, 10) ? "overdue" : "partial";
+}
+
 // حمولة الـ JWT بعد التحقق — تُحقن في req.user
 export interface AuthUser {
   id: string;

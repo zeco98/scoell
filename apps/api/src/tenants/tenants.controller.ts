@@ -4,7 +4,7 @@ import type { Request } from "express";
 import { z } from "zod";
 import { CurrentUser, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
-import type { AuthUser } from "../common/types";
+import { auditCtx as ctx, type AuthUser } from "../common/types";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 
@@ -22,9 +22,8 @@ const settingsSchema = z.object({
   darkMode: z.boolean().optional(),
 });
 
-function ctx(req: Request) {
-  return { ip: req.ip, userAgent: req.headers["user-agent"] };
-}
+const tenantStatusSchema = z.object({ status: z.enum(["active", "trial", "suspended"]) });
+
 
 @ApiTags("tenants")
 @ApiBearerAuth()
@@ -95,7 +94,7 @@ export class TenantsController {
   @Roles("SUPER_ADMIN")
   async changeStatus(
     @Param("id") id: string,
-    @Body() body: { status: "active" | "trial" | "suspended" },
+    @Body(new ZodPipe(tenantStatusSchema)) body: z.infer<typeof tenantStatusSchema>,
     @CurrentUser() user: AuthUser,
     @Req() req: Request,
   ) {

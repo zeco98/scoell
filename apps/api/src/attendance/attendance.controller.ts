@@ -4,7 +4,7 @@ import { bulkAttendanceSchema, type BulkAttendanceDto } from "@manarah/shared";
 import type { Request } from "express";
 import { CurrentUser, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
-import type { AuthUser } from "../common/types";
+import { auditCtx, type AuthUser } from "../common/types";
 import { AttendanceService } from "./attendance.service";
 
 @ApiTags("attendance")
@@ -30,7 +30,7 @@ export class AttendanceController {
     @CurrentUser() user: AuthUser,
     @Req() req: Request,
   ) {
-    return this.attendance.saveBulk(user, dto, { ip: req.ip, userAgent: req.headers["user-agent"] });
+    return this.attendance.saveBulk(user, dto, auditCtx(req));
   }
 
   @Get("today")

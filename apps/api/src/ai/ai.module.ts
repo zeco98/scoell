@@ -4,7 +4,7 @@ import type { Request } from "express";
 import { z } from "zod";
 import { CurrentUser, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
-import { tenantWhere, requireTenant, type AuthUser } from "../common/types";
+import { tenantWhere, requireTenant, auditCtx as ctx, type AuthUser } from "../common/types";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 
@@ -41,10 +41,6 @@ const generateSchema = z.object({
   kind: z.enum(["student_report", "parent_message", "exam_questions", "attendance_summary"]),
   context: z.record(z.unknown()).default({}),
 });
-
-function ctx(req: Request) {
-  return { ip: req.ip, userAgent: req.headers["user-agent"] };
-}
 
 @ApiTags("ai")
 @ApiBearerAuth()

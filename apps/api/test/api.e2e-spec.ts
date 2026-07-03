@@ -114,11 +114,13 @@ describe("Manarah API (e2e)", () => {
     });
     ids.result = result.id;
 
-    // تطبيق Nest كامل بنفس guards الإنتاج
+    // تطبيق Nest كامل بنفس guards + فلتر الأخطاء الإنتاجي
     const { AppModule } = await import("../src/app.module");
+    const { AllExceptionsFilter } = await import("../src/common/http-exception.filter");
     const moduleRef = await Test.createTestingModule({ imports: [AppModule] }).compile();
     app = moduleRef.createNestApplication();
     app.setGlobalPrefix("api");
+    app.useGlobalFilters(new AllExceptionsFilter());
     await app.init();
   });
 
@@ -341,5 +343,19 @@ describe("Manarah API (e2e)", () => {
       .set("Authorization", `Bearer ${admin.accessToken}`)
       .attach("file", Buffer.from("%PDF-1.4 fake"), { filename: "id.pdf", contentType: "application/pdf" })
       .expect(201);
+  });
+
+  // 13 — M4: قيمة حالة غير صالحة تُرفض بتحقق zod (400)، والخطأ بالشكل الموحّد
+  it("input validation: حالة طالب غير صالحة تُرفض بشكل خطأ موحّد", async () => {
+    const admin = await login("admin-a@test.io");
+    const res = await request(app.getHttpServer())
+      .patch(`/api/students/${ids.student}/status`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ status: "__invalid__" })
+      .expect(400);
+    // شكل الخطأ الموحّد من AllExceptionsFilter
+    expect(res.body).toHaveProperty("path");
+    expect(res.body).toHaveProperty("timestamp");
+    expect(res.body).toHaveProperty("statusCode", 400);
   });
 });

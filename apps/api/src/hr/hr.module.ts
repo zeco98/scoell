@@ -4,7 +4,7 @@ import type { Request } from "express";
 import { z } from "zod";
 import { CurrentUser, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
-import { tenantWhere, requireTenant, type AuthUser } from "../common/types";
+import { tenantWhere, requireTenant, auditCtx, type AuthUser } from "../common/types";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 
@@ -51,7 +51,7 @@ class HrController {
       entity: "Employee",
       entityId: employee.id,
       after: { name: dto.name, title: dto.title },
-      ctx: { ip: req.ip, userAgent: req.headers["user-agent"] },
+      ctx: auditCtx(req),
     });
     return employee;
   }
@@ -79,7 +79,7 @@ class HrController {
       before: { title: before.title, status: before.status, salary: before.salary },
       after: { title: employee.title, status: employee.status, salary: employee.salary },
       severity: dto.status === "terminated" ? "warning" : "info",
-      ctx: { ip: req.ip, userAgent: req.headers["user-agent"] },
+      ctx: auditCtx(req),
     });
     return employee;
   }

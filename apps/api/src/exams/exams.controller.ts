@@ -5,12 +5,8 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { CurrentUser, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
-import type { AuthUser } from "../common/types";
+import { auditCtx as ctx, type AuthUser } from "../common/types";
 import { ExamsService } from "./exams.service";
-
-function ctx(req: Request) {
-  return { ip: req.ip, userAgent: req.headers["user-agent"] };
-}
 
 const createExamSchema = z.object({
   name: z.string().min(2, "اسم الامتحان مطلوب"),

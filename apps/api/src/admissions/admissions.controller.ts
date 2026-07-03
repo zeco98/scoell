@@ -4,12 +4,8 @@ import { createAdmissionSchema, type CreateAdmissionDto } from "@manarah/shared"
 import type { Request } from "express";
 import { CurrentUser, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
-import type { AuthUser } from "../common/types";
+import { auditCtx as ctx, type AuthUser } from "../common/types";
 import { AdmissionsService } from "./admissions.service";
-
-function ctx(req: Request) {
-  return { ip: req.ip, userAgent: req.headers["user-agent"] };
-}
 
 @ApiTags("admissions")
 @ApiBearerAuth()

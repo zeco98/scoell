@@ -232,6 +232,9 @@ model Discount {
 
   tenant  Tenant  @relation(fields: [tenantId], references: [id])
   student Student @relation(fields: [studentId], references: [id])
+
+  @@index([tenantId])
+  @@index([studentId])
 }
 
 model Exam {
@@ -247,6 +250,9 @@ model Exam {
   tenant  Tenant       @relation(fields: [tenantId], references: [id])
   section Section      @relation(fields: [sectionId], references: [id])
   results ExamResult[]
+
+  @@index([tenantId])
+  @@index([sectionId])
 }
 
 model ExamResult {
@@ -265,6 +271,7 @@ model ExamResult {
   student Student @relation(fields: [studentId], references: [id])
 
   @@unique([examId, studentId])
+  @@index([studentId])
 }
 
 model Message {
@@ -282,6 +289,8 @@ model Message {
   createdAt    DateTime  @default(now())
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
 }
 
 model Notification {
@@ -331,6 +340,8 @@ model AiRequest {
   updatedAt    DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, createdAt])
 }
 
 // الموارد البشرية — MVP مبسّط
@@ -347,6 +358,8 @@ model Employee {
   userId       String? // ربط بحساب دخول إن وُجد
 
   tenant Tenant @relation(fields: [tenantId], references: [id])
+
+  @@index([tenantId, status])
 }
 
 // النقل المدرسي — عرض مبدئي لدور السائق
@@ -359,6 +372,9 @@ model TransportRoute {
   tenant   Tenant    @relation(fields: [tenantId], references: [id])
   driver   User?     @relation("driver", fields: [driverUserId], references: [id])
   students Student[]
+
+  @@index([tenantId])
+  @@index([driverUserId])
 }
 
 // تخزين الملفات — abstraction محلي الآن، S3-ready
@@ -374,4 +390,7 @@ model FileAsset {
   createdAt  DateTime @default(now())
 
   student Student? @relation(fields: [studentId], references: [id])
+
+  @@index([studentId])
+  @@index([tenantId])
 }

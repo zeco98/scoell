@@ -4,7 +4,7 @@ import { createMessageSchema, type CreateMessageDto } from "@manarah/shared";
 import type { Request } from "express";
 import { CurrentUser, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
-import type { AuthUser } from "../common/types";
+import { auditCtx, type AuthUser } from "../common/types";
 import { MessagesService } from "./messages.service";
 
 @ApiTags("messages")
@@ -26,6 +26,6 @@ export class MessagesController {
     @CurrentUser() user: AuthUser,
     @Req() req: Request,
   ) {
-    return this.messages.create(user, dto, { ip: req.ip, userAgent: req.headers["user-agent"] });
+    return this.messages.create(user, dto, auditCtx(req));
   }
 }

@@ -2,13 +2,7 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import type { CreatePaymentDto } from "@manarah/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService, type AuditContext } from "../audit/audit.service";
-import { tenantWhere, requireTenant, type AuthUser } from "../common/types";
-
-function feeStatus(total: number, paid: number, dueDate: string): string {
-  if (paid >= total) return "paid";
-  if (paid > 0) return "partial";
-  return dueDate < new Date().toISOString().slice(0, 10) ? "overdue" : "partial";
-}
+import { tenantWhere, requireTenant, computeFeeStatus as feeStatus, type AuthUser } from "../common/types";
 
 @Injectable()
 export class FeesService {
@@ -184,7 +178,11 @@ export class FeesService {
     if (user.role !== "SUPER_ADMIN") {
       throw new ForbiddenException("إلغاء السندات صلاحية المدير العام حصرًا");
     }
-    const payment = await this.prisma.payment.findUnique({ where: { id }, include: { feeRecord: true } });
+    // نطاق صريح: SUPER_ADMIN بلا tenant يرى الكل، لكن الاستعلام يبقى ضمن tenantWhere دفاعيًا
+    const payment = await this.prisma.payment.findFirst({
+      where: { id, ...tenantWhere(user) },
+      include: { feeRecord: true },
+    });
     if (!payment || payment.voidedAt) throw new NotFoundException("السند غير موجود أو ملغى");
     await this.prisma.$transaction(async (tx) => {
       await tx.payment.update({ where: { id }, data: { voidedAt: new Date() } });

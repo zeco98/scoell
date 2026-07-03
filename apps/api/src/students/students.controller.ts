@@ -13,16 +13,16 @@ import {
 } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { createStudentSchema, type CreateStudentDto } from "@manarah/shared";
+import { createStudentSchema, STUDENT_STATUSES, type CreateStudentDto } from "@manarah/shared";
 import type { Request } from "express";
+import { z } from "zod";
 import { CurrentUser, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
-import type { AuthUser } from "../common/types";
+import { auditCtx as ctx, type AuthUser } from "../common/types";
 import { StudentsService } from "./students.service";
 
-function ctx(req: Request) {
-  return { ip: req.ip, userAgent: req.headers["user-agent"] };
-}
+const changeStatusSchema = z.object({ status: z.enum(STUDENT_STATUSES) });
+const moveSectionSchema = z.object({ sectionId: z.string().min(1, "حدّد الشعبة") });
 
 @ApiTags("students")
 @ApiBearerAuth()
@@ -80,7 +80,7 @@ export class StudentsController {
   @Roles("SCHOOL_ADMIN")
   changeStatus(
     @Param("id") id: string,
-    @Body() body: { status: string },
+    @Body(new ZodPipe(changeStatusSchema)) body: z.infer<typeof changeStatusSchema>,
     @CurrentUser() user: AuthUser,
     @Req() req: Request,
   ) {
@@ -91,7 +91,7 @@ export class StudentsController {
   @Roles("SCHOOL_ADMIN")
   moveSection(
     @Param("id") id: string,
-    @Body() body: { sectionId: string },
+    @Body(new ZodPipe(moveSectionSchema)) body: z.infer<typeof moveSectionSchema>,
     @CurrentUser() user: AuthUser,
     @Req() req: Request,
   ) {

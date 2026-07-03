@@ -5,13 +5,9 @@ import type { Request, Response } from "express";
 import { z } from "zod";
 import { CurrentUser, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
-import type { AuthUser } from "../common/types";
+import { auditCtx as ctx, type AuthUser } from "../common/types";
 import { FeesService } from "./fees.service";
 import { renderReceiptHtml } from "../pdf/templates";
-
-function ctx(req: Request) {
-  return { ip: req.ip, userAgent: req.headers["user-agent"] };
-}
 
 const createFeeRecordSchema = z.object({
   studentId: z.string().min(1, "حدّد الطالب"),
@@ -19,6 +15,8 @@ const createFeeRecordSchema = z.object({
   total: z.number().int().positive("المبلغ يجب أن يكون موجبًا"),
   dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ استحقاق غير صالح"),
 });
+
+const voidPaymentSchema = z.object({ reason: z.string().min(3, "سبب الإلغاء مطلوب") });
 
 const discountSchema = z.object({
   studentId: z.string().min(1),
@@ -94,11 +92,11 @@ export class FeesController {
   @Roles("SUPER_ADMIN")
   voidPayment(
     @Param("id") id: string,
-    @Body() body: { reason: string },
+    @Body(new ZodPipe(voidPaymentSchema)) body: z.infer<typeof voidPaymentSchema>,
     @CurrentUser() user: AuthUser,
     @Req() req: Request,
   ) {
-    return this.fees.voidPayment(user, id, body?.reason ?? "بدون سبب مذكور", ctx(req));
+    return this.fees.voidPayment(user, id, body.reason, ctx(req));
   }
 
   /** سند القبض بصيغة قابلة للطباعة (A5، هوية منارة) — window.print() في العميل يخرجه PDF/طابعة */

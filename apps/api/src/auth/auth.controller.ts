@@ -6,7 +6,7 @@ import { loginSchema } from "@manarah/shared";
 import { z } from "zod";
 import { Public, CurrentUser } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
-import type { AuthUser, AuthedRequest } from "../common/types";
+import { auditCtx, type AuthUser, type AuthedRequest } from "../common/types";
 import { AuthService } from "./auth.service";
 
 const REFRESH_COOKIE = "manarah_refresh";
@@ -20,9 +20,6 @@ const changePasswordSchema = z.object({
     .regex(/\d/, "يجب أن تحوي رقمًا"),
 });
 
-function auditCtx(req: Request) {
-  return { ip: req.ip, userAgent: req.headers["user-agent"] };
-}
 
 function setRefreshCookie(res: Response, token: string) {
   res.cookie(REFRESH_COOKIE, token, {

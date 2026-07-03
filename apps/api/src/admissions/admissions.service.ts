@@ -17,6 +17,7 @@ export class AdmissionsService {
     return this.prisma.admission.findMany({
       where: tenantWhere(user),
       orderBy: { submittedAt: "desc" },
+      take: 500, // سقف أمان يمنع حمولة غير محدودة (خط أنابيب القبول محدود عمليًا)
     });
   }
 

@@ -21,6 +21,7 @@ export class ExamsService {
       where: tenantWhere(user),
       include: { section: true, _count: { select: { results: true } } },
       orderBy: { createdAt: "desc" },
+      take: 200, // سقف أمان
     });
   }
 
