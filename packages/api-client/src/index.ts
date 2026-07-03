@@ -192,6 +192,8 @@ export class ManarahClient {
 
   // ------------------------------------------------------------------- fees
   fees = {
+    createRecord: (dto: { studentId: string; plan: string; total: number; dueDate: string }) =>
+      this.request<FeeRecordItem>("POST", "/fees", dto),
     records: (q: { status?: string; query?: string; page?: number; pageSize?: number } = {}) =>
       this.request<{ items: FeeRecordItem[]; total: number; page: number; pageSize: number }>(
         "GET",

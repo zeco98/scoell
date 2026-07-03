@@ -13,6 +13,13 @@ function ctx(req: Request) {
   return { ip: req.ip, userAgent: req.headers["user-agent"] };
 }
 
+const createFeeRecordSchema = z.object({
+  studentId: z.string().min(1, "حدّد الطالب"),
+  plan: z.string().min(2, "اسم الخطة مطلوب"),
+  total: z.number().int().positive("المبلغ يجب أن يكون موجبًا"),
+  dueDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "تاريخ استحقاق غير صالح"),
+});
+
 const discountSchema = z.object({
   studentId: z.string().min(1),
   percent: z.number().int().min(1).max(100),
@@ -40,6 +47,16 @@ export class FeesController {
       page: page ? Number(page) : undefined,
       pageSize: pageSize ? Number(pageSize) : undefined,
     });
+  }
+
+  @Post("fees")
+  @Roles("SCHOOL_ADMIN", "ACCOUNTANT")
+  createRecord(
+    @Body(new ZodPipe(createFeeRecordSchema)) dto: z.infer<typeof createFeeRecordSchema>,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.fees.createRecord(user, dto, ctx(req));
   }
 
   @Get("fees/stats")

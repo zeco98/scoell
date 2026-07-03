@@ -223,7 +223,8 @@ async function main() {
   for (let i = 0; i < 16; i++) {
     const monthly = 15 + ((i * 3) % 6);
     const midterm = 22 + ((i * 5) % 9);
-    const finalExam = 40 + ((i * 7) % 21);
+    const finalExam = 30 + ((i * 7) % 21); // الحد الأقصى 50
+
     const total = monthly + midterm + finalExam;
     await prisma.examResult.create({
       data: {

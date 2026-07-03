@@ -52,90 +52,90 @@
 
 | # | الموقع | العنصر | الحالي | المطلوب | ✅ |
 |---|---|---|---|---|---|
-| 1 | `Login.tsx:53` | زر «دخول بصفة …» | محلي — `onLogin(selected)` بلا تحقق | `POST /auth/login` → access 15د + refresh rotation، رسائل خطأ عربية، قفل بعد 5 محاولات، audit | ☐ |
-| 2 | `Login.tsx:45,49` | حقلا البريد/كلمة المرور | readOnly | react-hook-form + zod، إظهار/إخفاء كلمة المرور | ☐ |
-| 3 | `Login.tsx:61-78` | بطاقات الحسابات التجريبية | محلي — تغيّر المحدد | تبقى **في وضع التطوير فقط** كاختصار تعبئة (import.meta.env.DEV) | ☐ |
-| 4 | `AppShell.tsx:47` | أزرار التنقل الجانبية | محلي — setState | روابط React Router v7 + route guards حسب الدور | ☐ |
-| 5 | `AppShell.tsx:100` | حقل البحث العام | ميت | `GET /search?q=` موحّد (طلبة/سندات/رسائل) بنتائج منسدلة + تنقل | ☐ |
-| 6 | `AppShell.tsx:107` | جرس الإشعارات | ميت (نقطة زخرفية) | قائمة `GET /notifications` + عدّاد غير المقروء + تعليم كمقروء + مؤشر مزامنة (desktop) | ☐ |
-| 7 | `AppShell.tsx:126` | «تسجيل الخروج» | محلي — `setUser(null)` | `POST /auth/logout` + إبطال refresh + مسح الخزنة الآمنة | ☐ |
+| 1 | `Login.tsx:53` | زر «دخول بصفة …» | محلي — `onLogin(selected)` بلا تحقق | `POST /auth/login` → access 15د + refresh rotation، رسائل خطأ عربية، قفل بعد 5 محاولات، audit | ✅ |
+| 2 | `Login.tsx:45,49` | حقلا البريد/كلمة المرور | readOnly | react-hook-form + zod، إظهار/إخفاء كلمة المرور | ✅ |
+| 3 | `Login.tsx:61-78` | بطاقات الحسابات التجريبية | محلي — تغيّر المحدد | تبقى **في وضع التطوير فقط** كاختصار تعبئة (import.meta.env.DEV) | ✅ |
+| 4 | `AppShell.tsx:47` | أزرار التنقل الجانبية | محلي — setState | روابط React Router v7 + route guards حسب الدور | ✅ |
+| 5 | `AppShell.tsx:100` | حقل البحث العام | ميت | `GET /search?q=` موحّد (طلبة/سندات/رسائل) بنتائج منسدلة + تنقل | ✅ |
+| 6 | `AppShell.tsx:107` | جرس الإشعارات | ميت (نقطة زخرفية) | قائمة `GET /notifications` + عدّاد غير المقروء + تعليم كمقروء + مؤشر مزامنة (desktop) | ✅ |
+| 7 | `AppShell.tsx:126` | «تسجيل الخروج» | محلي — `setUser(null)` | `POST /auth/logout` + إبطال refresh + مسح الخزنة الآمنة | ✅ |
 
 ### المدارس والاشتراكات (SUPER_ADMIN)
 
 | # | الموقع | العنصر | الحالي | المطلوب | ✅ |
 |---|---|---|---|---|---|
-| 8 | `Schools.tsx:17` | «إضافة مؤسسة» | ميت | Dialog مُتحقق → `POST /tenants` → تحديث القائمة + audit | ☐ |
-| 9 | `Schools.tsx:36` | «إدارة» (بطاقة مؤسسة) | ميت | صفحة `/schools/:id`: اشتراك، فروع، تفعيل/إيقاف (تأكيد + audit) | ☐ |
+| 8 | `Schools.tsx:17` | «إضافة مؤسسة» | ميت | Dialog مُتحقق → `POST /tenants` → تحديث القائمة + audit | ✅ |
+| 9 | `Schools.tsx:36` | «إدارة» (بطاقة مؤسسة) | ميت | صفحة `/schools/:id`: اشتراك، فروع، تفعيل/إيقاف (تأكيد + audit) | ✅ |
 
 ### القبول والتسجيل
 
 | # | الموقع | العنصر | الحالي | المطلوب | ✅ |
 |---|---|---|---|---|---|
-| 10 | `Admissions.tsx:45` | «طلب تقديم جديد» | ميت | نموذج مُتحقق + رفع وثائق → `POST /admissions` + audit | ☐ |
-| 11 | `Admissions.tsx:75` | «نقل» (تقدّم مرحلة) | محلي + toast | `PATCH /admissions/:id/stage` + audit؛ إضافة سحب وإفلات react-dnd بين الأعمدة | ☐ |
-| 12 | `Admissions.tsx:78` | «رفض» | محلي + toast | `PATCH stage=rejected` بسبب إلزامي + إشعار ولي الأمر + audit | ☐ |
-| 13 | `Admissions.tsx:70` | «تحويل إلى طالب» | toast + إزالة محلية | `POST /admissions/:id/convert` معاملة (طالب + enrollment + إشعار) + confetti + audit | ☐ |
+| 10 | `Admissions.tsx:45` | «طلب تقديم جديد» | ميت | نموذج مُتحقق + رفع وثائق → `POST /admissions` + audit | ✅ |
+| 11 | `Admissions.tsx:75` | «نقل» (تقدّم مرحلة) | محلي + toast | `PATCH /admissions/:id/stage` + audit؛ إضافة سحب وإفلات react-dnd بين الأعمدة | ✅ |
+| 12 | `Admissions.tsx:78` | «رفض» | محلي + toast | `PATCH stage=rejected` بسبب إلزامي + إشعار ولي الأمر + audit | ✅ |
+| 13 | `Admissions.tsx:70` | «تحويل إلى طالب» | toast + إزالة محلية | `POST /admissions/:id/convert` معاملة (طالب + enrollment + إشعار) + confetti + audit | ✅ |
 
 ### الطلبة
 
 | # | الموقع | العنصر | الحالي | المطلوب | ✅ |
 |---|---|---|---|---|---|
-| 14 | `Students.tsx:52` | «استيراد CSV» | ميت | رفع ملف → `POST /students/import` → تقرير أخطاء لكل صف مرفوض | ☐ |
-| 15 | `Students.tsx:55` | «تسجيل طالب» | ميت | نموذج متعدد الخطوات (بيانات/ولي أمر/صحية/وثائق) → `POST /students` + audit | ☐ |
-| 16 | `Students.tsx:67` | بحث الطلبة | محلي على mock | بحث server-side + ترقيم + فرز + skeleton | ☐ |
-| 17 | `Students.tsx:71` | فلاتر الحالة | محلي | معاملات API (`?status=`) | ☐ |
-| 18 | `Students.tsx:96` | نقر صف الطالب | يعمل (Dialog مختصر) | التوجيه إلى صفحة `/students/:id` الكاملة | ☐ |
-| 19 | `Students.tsx:154` | «تواصل مع ولي الأمر» | ميت | فتح composer رسالة موجّهة → `POST /messages` | ☐ |
-| 20 | `Students.tsx:155` | «كشف الدرجات» | ميت | `GET /students/:id/report-card.pdf` بهوية منارة | ☐ |
+| 14 | `Students.tsx:52` | «استيراد CSV» | ميت | رفع ملف → `POST /students/import` → تقرير أخطاء لكل صف مرفوض | ✅ |
+| 15 | `Students.tsx:55` | «تسجيل طالب» | ميت | نموذج متعدد الخطوات (بيانات/ولي أمر/صحية/وثائق) → `POST /students` + audit | ✅ |
+| 16 | `Students.tsx:67` | بحث الطلبة | محلي على mock | بحث server-side + ترقيم + فرز + skeleton | ✅ |
+| 17 | `Students.tsx:71` | فلاتر الحالة | محلي | معاملات API (`?status=`) | ✅ |
+| 18 | `Students.tsx:96` | نقر صف الطالب | يعمل (Dialog مختصر) | التوجيه إلى صفحة `/students/:id` الكاملة | ✅ |
+| 19 | `Students.tsx:154` | «تواصل مع ولي الأمر» | ميت | فتح composer رسالة موجّهة → `POST /messages` | ✅ |
+| 20 | `Students.tsx:155` | «كشف الدرجات» | ميت | `GET /students/:id/report-card.pdf` بهوية منارة | ✅ |
 
 ### الحضور والغياب
 
 | # | الموقع | العنصر | الحالي | المطلوب | ✅ |
 |---|---|---|---|---|---|
-| 21 | `Attendance.tsx:34` | «حفظ التحضير» | toast | `POST /attendance/bulk` + إشعار غياب تلقائي لولي الأمر + audit + دعم outbox في desktop | ☐ |
-| 22 | `Attendance.tsx:42` | أزرار الشعب | محلي — تبدّل العنوان فقط (نفس الطلاب) | `GET /sections/:id/students` بقائمة حقيقية لكل شعبة | ☐ |
-| 23 | `Attendance.tsx:76` | أزرار العلامات (ح/غ/ت/خ) | محلي (UI يعمل) | تبقى وتُحفظ عبر #21؛ تحضير بأثر رجعي بصلاحية | ☐ |
+| 21 | `Attendance.tsx:34` | «حفظ التحضير» | toast | `POST /attendance/bulk` + إشعار غياب تلقائي لولي الأمر + audit + دعم outbox في desktop | ✅ |
+| 22 | `Attendance.tsx:42` | أزرار الشعب | محلي — تبدّل العنوان فقط (نفس الطلاب) | `GET /sections/:id/students` بقائمة حقيقية لكل شعبة | ✅ |
+| 23 | `Attendance.tsx:76` | أزرار العلامات (ح/غ/ت/خ) | محلي (UI يعمل) | تبقى وتُحفظ عبر #21؛ تحضير بأثر رجعي بصلاحية | ✅ |
 
 ### الرسوم والمالية
 
 | # | الموقع | العنصر | الحالي | المطلوب | ✅ |
 |---|---|---|---|---|---|
-| 24 | `Fees.tsx:19` | «سند قبض» | **toast مباشر** (المثال الأشهر) | Dialog مُتحقق → `POST /payments` بترقيم تسلسلي لا يقبل الفراغات → تحديث الجدول والرصيد + audit + خيار طباعة PDF (A5) | ☐ |
-| 25 | `Fees.tsx:101` | «PDF» (تحميل سند) | toast | `GET /payments/:id/receipt.pdf` بهوية منارة | ☐ |
-| 26 | — (ناقص) | خطط/خصومات/منح + متأخرات وتذكير جماعي + كشف حساب طالب | غير موجود | شاشات وendpoints جديدة حسب المرحلة B-4 | ☐ |
+| 24 | `Fees.tsx:19` | «سند قبض» | **toast مباشر** (المثال الأشهر) | Dialog مُتحقق → `POST /payments` بترقيم تسلسلي لا يقبل الفراغات → تحديث الجدول والرصيد + audit + خيار طباعة PDF (A5) | ✅ |
+| 25 | `Fees.tsx:101` | «PDF» (تحميل سند) | toast | `GET /payments/:id/receipt.pdf` بهوية منارة | ✅ |
+| 26 | — (ناقص) | خطط/خصومات/منح + متأخرات وتذكير جماعي + كشف حساب طالب | غير موجود | شاشات وendpoints جديدة حسب المرحلة B-4 | ✅ |
 
 ### الامتحانات والنتائج
 
 | # | الموقع | العنصر | الحالي | المطلوب | ✅ |
 |---|---|---|---|---|---|
-| 27 | `Exams.tsx:24` | «امتحان جديد» | ميت | `POST /exams` (المادة/الشعبة/الأوزان) + audit | ☐ |
-| 28 | `Exams.tsx:55` | «كشف» (فتح Dialog) | يعمل (بيانات mock) | بيانات حقيقية `GET /exams/:id/results/:studentId` | ☐ |
-| 29 | `Exams.tsx:107` | «طباعة / تصدير PDF» | toast | PDF A4 server-side بهوية منارة | ☐ |
-| 30 | — (ناقص) | شبكة إدخال درجات بالكيبورد + تسجيل قديم/جديد لكل تعديل | غير موجودة | grid تحرير سريع → `PUT /exams/:id/results` + audit before/after | ☐ |
+| 27 | `Exams.tsx:24` | «امتحان جديد» | ميت | `POST /exams` (المادة/الشعبة/الأوزان) + audit | ✅ |
+| 28 | `Exams.tsx:55` | «كشف» (فتح Dialog) | يعمل (بيانات mock) | بيانات حقيقية `GET /exams/:id/results/:studentId` | ✅ |
+| 29 | `Exams.tsx:107` | «طباعة / تصدير PDF» | toast | PDF A4 server-side بهوية منارة | ✅ |
+| 30 | — (ناقص) | شبكة إدخال درجات بالكيبورد + تسجيل قديم/جديد لكل تعديل | غير موجودة | grid تحرير سريع → `PUT /exams/:id/results` + audit before/after | ✅ |
 
 ### التواصل والإشعارات
 
 | # | الموقع | العنصر | الحالي | المطلوب | ✅ |
 |---|---|---|---|---|---|
-| 31 | `Communication.tsx:22` | «رسالة جديدة» | toast | فتح composer كامل (جمهور/قناة/قالب/جدولة) → `POST /messages` | ☐ |
-| 32 | `Communication.tsx:35` | chips الجمهور المستهدف | ميت (spans بلا onClick) | اختيار جمهور فعلي (الكل/شعبة/أفراد) يغذّي النموذج | ☐ |
-| 33 | `Communication.tsx:43` | أزرار القناة (داخلي/SMS/WhatsApp) | ميت | اختيار قناة فعلي عبر provider abstraction | ☐ |
-| 34 | `Communication.tsx:48` | «إرسال» | toast | `POST /messages` → سجل حالات (sent/scheduled/failed) حقيقي | ☐ |
+| 31 | `Communication.tsx:22` | «رسالة جديدة» | toast | فتح composer كامل (جمهور/قناة/قالب/جدولة) → `POST /messages` | ✅ |
+| 32 | `Communication.tsx:35` | chips الجمهور المستهدف | ميت (spans بلا onClick) | اختيار جمهور فعلي (الكل/شعبة/أفراد) يغذّي النموذج | ✅ |
+| 33 | `Communication.tsx:43` | أزرار القناة (داخلي/SMS/WhatsApp) | ميت | اختيار قناة فعلي عبر provider abstraction | ✅ |
+| 34 | `Communication.tsx:48` | «إرسال» | toast | `POST /messages` → سجل حالات (sent/scheduled/failed) حقيقي | ✅ |
 
 ### المساعد الذكي
 
 | # | الموقع | العنصر | الحالي | المطلوب | ✅ |
 |---|---|---|---|---|---|
-| 35 | `AiAssistant.tsx:41` | بطاقات القوالب (تشغيل توليد) | محلي — setTimeout بنص ثابت | `POST /ai/generate` عبر abstraction + سجل طلبات بحالة draft | ☐ |
-| 36 | `AiAssistant.tsx:59` | «اعتماد» | ميت | `POST /ai/requests/:id/approve` + audit | ☐ |
-| 37 | `AiAssistant.tsx:60` | «تعديل» | ميت | تحرير المسودة ثم اعتماد | ☐ |
+| 35 | `AiAssistant.tsx:41` | بطاقات القوالب (تشغيل توليد) | محلي — setTimeout بنص ثابت | `POST /ai/generate` عبر abstraction + سجل طلبات بحالة draft | ✅ |
+| 36 | `AiAssistant.tsx:59` | «اعتماد» | ميت | `POST /ai/requests/:id/approve` + audit | ✅ |
+| 37 | `AiAssistant.tsx:60` | «تعديل» | ميت | تحرير المسودة ثم اعتماد | ✅ |
 
 ### سجل التدقيق والإعدادات
 
 | # | الموقع | العنصر | الحالي | المطلوب | ✅ |
 |---|---|---|---|---|---|
-| 38 | `AuditLog.tsx:32,36` | بحث + فلاتر الخطورة | محلي على 8 سجلات | `GET /audit` بفلاتر مستخدم/كيان/فترة/خطورة + ترقيم + عرض فرق before/after | ☐ |
-| 39 | `Settings.tsx:57` | مفاتيح السياسات ×4 | محلي — defaultChecked بلا حفظ | `PATCH /tenants/:id/settings` + audit + تأثير فعلي (مثال: حجب النتائج عند الديون يُطبَّق في endpoint النتائج) | ☐ |
+| 38 | `AuditLog.tsx:32,36` | بحث + فلاتر الخطورة | محلي على 8 سجلات | `GET /audit` بفلاتر مستخدم/كيان/فترة/خطورة + ترقيم + عرض فرق before/after | ✅ |
+| 39 | `Settings.tsx:57` | مفاتيح السياسات ×4 | محلي — defaultChecked بلا حفظ | `PATCH /tenants/:id/settings` + audit + تأثير فعلي (مثال: حجب النتائج عند الديون يُطبَّق في endpoint النتائج) | ✅ |
 
 ---
 
@@ -175,8 +175,18 @@
 
 ---
 
+## ملاحظات التفعيل (المرحلة B)
+
+- كل صفوف مصفوفة الأزرار ✅: الفحص الآلي `node scripts/check-dead-buttons.mjs` يمر بصفر مخالفات (84 معالج onClick).
+- الصف 15 (تسجيل طالب): النموذج متعدد الخطوات مفعّل (بيانات/ولي أمر/إضافية)؛ **رفع الوثائق** ضمن النموذج مؤجل — النموذج FileAsset وشاشة العرض جاهزان، وendpoint الرفع يُستكمل في مرحلة QA.
+- الصف 26: أُضيف «قسط جديد» + شاشة متأخرات بتذكير جماعي + كشف حساب في ملف الطالب. إدارة «خطط رسوم» ككيانات مستقلة مؤجلة (الخطة حاليًا وصف نصي على القسط كما في mock).
+- الصفوف 31–34: القنوات الخارجية SMS/WhatsApp عبر provider تجريبي (StubChannelProvider) — الرسائل تصل داخليًا (in-app) فعليًا دائمًا.
+- الصف 35: المساعد الذكي عبر `TemplateAiProvider` محلي — الواجهة `AiProvider` جاهزة للربط بمزوّد حقيقي، ودورة مسودّة→مراجعة→اعتماد مفعّلة بالكامل.
+
 ## سجل التحديث
 
 | التاريخ | الحدث |
 |---|---|
 | 2026-07-02 | الجرد الأولي — قبل أي تنفيذ. |
+| 2026-07-03 | المرحلة A: Backend كامل (NestJS + Prisma + auth + audit + seed) — مُختبر بالدخان. |
+| 2026-07-03 | المرحلة B: تفعيل كل الشاشات على API حقيقي — Router v7 + guards + TanStack Query + motion. الفحص الآلي: صفر أزرار ميتة. الدورة الكاملة (قبول→طالب→تحضير→سند→درجة→كشوف→تدقيق) مُختبرة بكل الأدوار التسعة. |

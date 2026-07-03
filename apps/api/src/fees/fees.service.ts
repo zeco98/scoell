@@ -85,6 +85,38 @@ export class FeesService {
     return { items, total, page, pageSize };
   }
 
+  /** قسط جديد لطالب — أساس المطالبة المالية */
+  async createRecord(
+    user: AuthUser,
+    dto: { studentId: string; plan: string; total: number; dueDate: string },
+    ctx: AuditContext,
+  ) {
+    const tenantId = requireTenant(user);
+    const student = await this.prisma.student.findFirst({ where: { id: dto.studentId, tenantId } });
+    if (!student) throw new NotFoundException("الطالب غير موجود");
+    const record = await this.prisma.feeRecord.create({
+      data: {
+        tenantId,
+        studentId: dto.studentId,
+        plan: dto.plan,
+        total: dto.total,
+        dueDate: dto.dueDate,
+        status: feeStatus(dto.total, 0, dto.dueDate),
+      },
+      include: { student: { select: { id: true, name: true, code: true } } },
+    });
+    await this.audit.log({
+      user,
+      tenantId,
+      action: `قسط جديد للطالب ${student.name}: ${dto.total.toLocaleString("en")} د.ع (${dto.plan})`,
+      entity: "FeeRecord",
+      entityId: record.id,
+      after: { plan: dto.plan, total: dto.total, dueDate: dto.dueDate },
+      ctx,
+    });
+    return record;
+  }
+
   /**
    * سند قبض جديد — الترقيم التسلسلي بلا فراغات مضمون بمعاملة واحدة:
    * زيادة العدّاد وإنشاء السند وتحديث القسط تنجح كلها أو تفشل كلها.

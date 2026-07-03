@@ -28,6 +28,7 @@ export function StatCard({
   icon: Icon,
   label,
   value,
+  render,
   hint,
   trend,
   tone = "brand",
@@ -35,6 +36,8 @@ export function StatCard({
   icon: LucideIcon;
   label: string;
   value: string;
+  /** بديل اختياري لعرض القيمة (مثل عدّاد count-up متحرك) */
+  render?: ReactNode;
   hint?: string;
   trend?: number;
   tone?: "brand" | "success" | "warning" | "info" | "danger";
@@ -51,7 +54,7 @@ export function StatCard({
       <div className="flex flex-col gap-1">
         <span className="text-muted-foreground">{label}</span>
         <span className="text-foreground" style={{ fontSize: 26, fontWeight: 700, lineHeight: 1.2 }}>
-          {value}
+          {render ?? value}
         </span>
         {(hint || trend !== undefined) && (
           <div className="flex items-center gap-1.5 mt-0.5">

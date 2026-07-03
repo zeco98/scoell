@@ -1,4 +1,4 @@
-import type { Role } from "./mock";
+import type { Role } from "@manarah/shared";
 import {
   LayoutDashboard,
   Building2,
@@ -11,45 +11,52 @@ import {
   ShieldCheck,
   Sparkles,
   Settings,
+  Users,
+  Bus,
   type LucideIcon,
 } from "lucide-react";
 
-export type ViewKey =
-  | "dashboard"
-  | "schools"
-  | "admissions"
-  | "students"
-  | "attendance"
-  | "fees"
-  | "exams"
-  | "communication"
-  | "audit"
-  | "ai"
-  | "settings";
-
 export interface NavItem {
-  key: ViewKey;
+  path: string;
   label: string;
   icon: LucideIcon;
   roles: Role[];
 }
 
-const ALL: Role[] = ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "TEACHER", "PARENT", "STUDENT", "AUDITOR"];
+const ALL: Role[] = [
+  "SUPER_ADMIN",
+  "SCHOOL_ADMIN",
+  "ACCOUNTANT",
+  "TEACHER",
+  "PARENT",
+  "STUDENT",
+  "DRIVER",
+  "HR",
+  "AUDITOR",
+];
 
 export const NAV_ITEMS: NavItem[] = [
-  { key: "dashboard", label: "لوحة المعلومات", icon: LayoutDashboard, roles: ALL },
-  { key: "schools", label: "المدارس والاشتراكات", icon: Building2, roles: ["SUPER_ADMIN"] },
-  { key: "admissions", label: "القبول والتسجيل", icon: UserPlus, roles: ["SCHOOL_ADMIN"] },
-  { key: "students", label: "الطلبة", icon: GraduationCap, roles: ["SCHOOL_ADMIN", "ACCOUNTANT", "TEACHER", "PARENT"] },
-  { key: "attendance", label: "الحضور والغياب", icon: CalendarCheck, roles: ["SCHOOL_ADMIN", "TEACHER", "PARENT", "STUDENT"] },
-  { key: "fees", label: "الرسوم والمالية", icon: Wallet, roles: ["SCHOOL_ADMIN", "ACCOUNTANT", "PARENT"] },
-  { key: "exams", label: "الامتحانات والنتائج", icon: ClipboardList, roles: ["SCHOOL_ADMIN", "TEACHER", "PARENT", "STUDENT"] },
-  { key: "communication", label: "التواصل والإشعارات", icon: MessageSquare, roles: ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "TEACHER", "PARENT"] },
-  { key: "ai", label: "المساعد الذكي", icon: Sparkles, roles: ["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER"] },
-  { key: "audit", label: "سجل التدقيق", icon: ShieldCheck, roles: ["SUPER_ADMIN", "AUDITOR", "SCHOOL_ADMIN"] },
-  { key: "settings", label: "الإعدادات", icon: Settings, roles: ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"] },
+  { path: "/dashboard", label: "لوحة المعلومات", icon: LayoutDashboard, roles: ALL },
+  { path: "/schools", label: "المدارس والاشتراكات", icon: Building2, roles: ["SUPER_ADMIN"] },
+  { path: "/admissions", label: "القبول والتسجيل", icon: UserPlus, roles: ["SCHOOL_ADMIN"] },
+  { path: "/students", label: "الطلبة", icon: GraduationCap, roles: ["SCHOOL_ADMIN", "ACCOUNTANT", "TEACHER", "PARENT"] },
+  { path: "/attendance", label: "الحضور والغياب", icon: CalendarCheck, roles: ["SCHOOL_ADMIN", "TEACHER"] },
+  { path: "/fees", label: "الرسوم والمالية", icon: Wallet, roles: ["SCHOOL_ADMIN", "ACCOUNTANT", "PARENT"] },
+  { path: "/exams", label: "الامتحانات والنتائج", icon: ClipboardList, roles: ["SCHOOL_ADMIN", "TEACHER", "PARENT", "STUDENT"] },
+  { path: "/communication", label: "التواصل والإشعارات", icon: MessageSquare, roles: ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "TEACHER"] },
+  { path: "/hr", label: "الموارد البشرية", icon: Users, roles: ["SCHOOL_ADMIN", "HR"] },
+  { path: "/transport", label: "النقل المدرسي", icon: Bus, roles: ["SCHOOL_ADMIN", "DRIVER"] },
+  { path: "/ai", label: "المساعد الذكي", icon: Sparkles, roles: ["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER"] },
+  { path: "/audit", label: "سجل التدقيق", icon: ShieldCheck, roles: ["SUPER_ADMIN", "AUDITOR", "SCHOOL_ADMIN"] },
+  { path: "/settings", label: "الإعدادات", icon: Settings, roles: ["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT"] },
 ];
 
 export function navForRole(role: Role): NavItem[] {
   return NAV_ITEMS.filter((n) => n.roles.includes(role));
+}
+
+/** هل يحق للدور فتح هذا المسار؟ (الحكم الحقيقي في السيرفر — هذا تجميلي) */
+export function canAccess(role: Role, path: string): boolean {
+  const item = NAV_ITEMS.find((n) => path === n.path || path.startsWith(n.path + "/"));
+  return item ? item.roles.includes(role) : true;
 }
