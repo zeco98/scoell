@@ -14,7 +14,8 @@ export class SectionsController {
   @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "TEACHER", "AUDITOR")
   async list(@CurrentUser() user: AuthUser) {
     const sections = await this.prisma.section.findMany({
-      where: tenantWhere(user),
+      // المعلم يرى شعبه فقط؛ بقية الأدوار كل شعب المؤسسة
+      where: { ...tenantWhere(user), ...(user.role === "TEACHER" ? { teacherId: user.id } : {}) },
       include: { _count: { select: { students: { where: { archivedAt: null } } } } },
       orderBy: [{ stage: "asc" }, { name: "asc" }],
     });
@@ -30,6 +31,14 @@ export class SectionsController {
   @Get(":id/students")
   @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER", "AUDITOR")
   async students(@CurrentUser() user: AuthUser, @Param("id") id: string) {
+    // المعلم يقرأ طلاب شعبه فقط
+    if (user.role === "TEACHER") {
+      const owns = await this.prisma.section.findFirst({
+        where: { id, teacherId: user.id, ...tenantWhere(user) },
+        select: { id: true },
+      });
+      if (!owns) return [];
+    }
     return this.prisma.student.findMany({
       where: { sectionId: id, archivedAt: null, status: "active", ...tenantWhere(user) },
       orderBy: { name: "asc" },

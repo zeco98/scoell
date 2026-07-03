@@ -59,11 +59,13 @@ describe("Manarah API (e2e)", () => {
 
     await mk("مدير أ", "admin-a@test.io", "SCHOOL_ADMIN", tenantA.id);
     await mk("محاسب أ", "acc-a@test.io", "ACCOUNTANT", tenantA.id);
-    await mk("معلم أ", "teacher-a@test.io", "TEACHER", tenantA.id);
+    const teacherA = await mk("معلم أ", "teacher-a@test.io", "TEACHER", tenantA.id);
+    await mk("معلم آخر أ", "teacher2-a@test.io", "TEACHER", tenantA.id); // معلم لا يملك الشعبة
     await mk("مدير ب", "admin-b@test.io", "SCHOOL_ADMIN", tenantB.id);
 
+    // شعبة المؤسسة أ مملوكة للمعلم أ
     const section = await prisma.section.create({
-      data: { tenantId: tenantA.id, stage: "الرابع علمي", name: "أ" },
+      data: { tenantId: tenantA.id, stage: "الرابع علمي", name: "أ", teacherId: teacherA.id },
     });
     ids.section = section.id;
 
@@ -79,6 +81,23 @@ describe("Manarah API (e2e)", () => {
       },
     });
     ids.student = student.id;
+
+    // طالب في المؤسسة ب — لاختبار حقن معرّف أجنبي
+    const sectionB = await prisma.section.create({
+      data: { tenantId: tenantB.id, stage: "الرابع علمي", name: "أ" },
+    });
+    const studentB = await prisma.student.create({
+      data: {
+        tenantId: tenantB.id,
+        code: "st2000",
+        name: "طالب المؤسسة ب",
+        gender: "MALE",
+        sectionId: sectionB.id,
+        guardianName: "ولي ب",
+        guardianPhone: "07709998877",
+      },
+    });
+    ids.studentB = studentB.id;
 
     const fee = await prisma.feeRecord.create({
       data: { tenantId: tenantA.id, studentId: student.id, plan: "قسط سنوي", total: 1000000, dueDate: "2026-09-01" },
@@ -133,15 +152,17 @@ describe("Manarah API (e2e)", () => {
     await request(app.getHttpServer()).get("/api/students").expect(401);
   });
 
-  // 3 — عزل المستأجرين (الاختبار الصريح)
-  it("tenant isolation: مدير المؤسسة ب لا يرى أي طالب من المؤسسة أ", async () => {
+  // 3 — عزل المستأجرين (الاختبار الصريح): ب يرى طلابه فقط لا طلاب أ
+  it("tenant isolation: مدير المؤسسة ب يرى طلابه فقط ولا يرى طلاب المؤسسة أ", async () => {
     const adminB = await login("admin-b@test.io");
     const res = await request(app.getHttpServer())
       .get("/api/students")
       .set("Authorization", `Bearer ${adminB.accessToken}`)
       .expect(200);
-    expect(res.body.total).toBe(0);
-    expect(res.body.items).toHaveLength(0);
+    // يرى طالب مؤسسته فقط، ولا يظهر أي طالب من المؤسسة أ
+    const ids_ = (res.body.items as { id: string }[]).map((s) => s.id);
+    expect(ids_).toContain(ids.studentB);
+    expect(ids_).not.toContain(ids.student);
 
     // ولا يستطيع فتح ملف طالب المؤسسة أ مباشرة
     await request(app.getHttpServer())
@@ -258,5 +279,67 @@ describe("Manarah API (e2e)", () => {
       .post("/api/auth/login")
       .send({ email: "acc-a@test.io", password: PASSWORD })
       .expect(403);
+  });
+
+  // 9 — H1: حقن studentId أجنبي في الدرجات مرفوض (400) ولا يُكتب شيء
+  it("IDOR grades: إدخال درجة لطالب من مؤسسة أخرى يُرفض", async () => {
+    const teacher = await login("teacher-a@test.io");
+    await request(app.getHttpServer())
+      .put(`/api/exams/${ids.exam}/results`)
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .send({ rows: [{ studentId: ids.studentB, monthly: 20, midterm: 30, finalExam: 50 }] })
+      .expect(400);
+    // لم تُنشأ أي نتيجة لطالب المؤسسة ب
+    const leaked = await prisma.examResult.findFirst({ where: { studentId: ids.studentB } });
+    expect(leaked).toBeNull();
+  });
+
+  // 10 — H2: حقن studentId أجنبي في الحضور مرفوض (400)
+  it("IDOR attendance: تحضير طالب من مؤسسة أخرى يُرفض", async () => {
+    const teacher = await login("teacher-a@test.io");
+    await request(app.getHttpServer())
+      .post("/api/attendance/bulk")
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .send({
+        sectionId: ids.section,
+        date: new Date().toISOString().slice(0, 10),
+        rows: [{ studentId: ids.studentB, mark: "absent" }],
+      })
+      .expect(400);
+    const leaked = await prisma.attendanceRecord.findFirst({ where: { studentId: ids.studentB } });
+    expect(leaked).toBeNull();
+  });
+
+  // 11 — M1: معلم لا يملك الشعبة ممنوع من تحضيرها (403)
+  it("teacher scope: معلم آخر لا يملك الشعبة يُمنع من تحضيرها وعرضها", async () => {
+    const other = await login("teacher2-a@test.io");
+    await request(app.getHttpServer())
+      .get(`/api/attendance/sheet?sectionId=${ids.section}`)
+      .set("Authorization", `Bearer ${other.accessToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .post("/api/attendance/bulk")
+      .set("Authorization", `Bearer ${other.accessToken}`)
+      .send({
+        sectionId: ids.section,
+        date: new Date().toISOString().slice(0, 10),
+        rows: [{ studentId: ids.student, mark: "present" }],
+      })
+      .expect(403);
+  });
+
+  // 12 — M2: رفع ملف بنوع غير مسموح يُرفض (400)
+  it("upload MIME: رفع ملف تنفيذي يُرفض، وPDF يُقبل", async () => {
+    const admin = await login("admin-a@test.io");
+    await request(app.getHttpServer())
+      .post(`/api/students/${ids.student}/documents`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .attach("file", Buffer.from("MZ\x90\x00binary"), { filename: "virus.exe", contentType: "application/x-msdownload" })
+      .expect(400);
+    await request(app.getHttpServer())
+      .post(`/api/students/${ids.student}/documents`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .attach("file", Buffer.from("%PDF-1.4 fake"), { filename: "id.pdf", contentType: "application/pdf" })
+      .expect(201);
   });
 });

@@ -267,9 +267,15 @@ export class StudentsService {
     ctx: AuditContext,
   ) {
     const tenantId = requireTenant(user);
+    if (!file) throw new BadRequestException("لم يُرفَع أي ملف");
     const student = await this.prisma.student.findFirst({ where: { id: studentId, tenantId } });
     if (!student) throw new NotFoundException("الطالب غير موجود");
     if (file.size > 10 * 1024 * 1024) throw new BadRequestException("الحد الأقصى للملف 10MB");
+    // M2 — قائمة أنواع مسموحة فقط (صور/PDF)؛ رفض التنفيذيات وHTML
+    const ALLOWED = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"];
+    if (!ALLOWED.includes(file.mimetype)) {
+      throw new BadRequestException("نوع الملف غير مسموح — يُقبل صور أو PDF فقط");
+    }
 
     const { mkdir, writeFile } = await import("fs/promises");
     const { join } = await import("path");

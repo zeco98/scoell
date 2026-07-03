@@ -3,13 +3,29 @@ import { SwaggerModule, DocumentBuilder } from "@nestjs/swagger";
 import helmet from "helmet";
 import cookieParser from "cookie-parser";
 import { AppModule } from "./app.module";
+import { AllExceptionsFilter } from "./common/http-exception.filter";
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
 
   app.setGlobalPrefix("api");
-  app.use(helmet());
+  // Helmet مع CSP صريح — واجهة الـ API لا تقدّم HTML تفاعليًا عدا مستندات الطباعة
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: ["'self'"],
+          styleSrc: ["'self'", "'unsafe-inline'", "https://fonts.googleapis.com"],
+          fontSrc: ["'self'", "https://fonts.gstatic.com"],
+          imgSrc: ["'self'", "data:"],
+          scriptSrc: ["'self'", "'unsafe-inline'"], // زر الطباعة في مستندات السند/الكشف
+        },
+      },
+      crossOriginResourcePolicy: { policy: "same-site" },
+    }),
+  );
   app.use(cookieParser());
+  app.useGlobalFilters(new AllExceptionsFilter());
 
   const origins = (process.env.CORS_ORIGINS ?? "http://localhost:5173")
     .split(",")

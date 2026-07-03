@@ -9,6 +9,9 @@ import * as argon2 from "argon2";
 const prisma = new PrismaClient();
 
 const PASSWORD = process.env.SEED_PASSWORD || "Manarah@2026";
+// في الإنتاج: SEED_FORCE_PASSWORD_CHANGE=true يُجبر كل حساب seed على تغيير كلمة
+// المرور عند أول دخول. يبقى false في التطوير للحفاظ على سلاسة العرض التجريبي.
+const FORCE_CHANGE = process.env.SEED_FORCE_PASSWORD_CHANGE === "true";
 
 // --- بيانات mock.ts الأصلية ---
 const SCHOOLS = [
@@ -65,7 +68,7 @@ async function main() {
   // --- المستخدمون: الأدوار التسعة ---
   const mkUser = (name: string, email: string, role: string, tenantId: string | null, avatarColor: string) =>
     prisma.user.create({
-      data: { name, email, role, tenantId, avatarColor, passwordHash: hash, mustChangePassword: false },
+      data: { name, email, role, tenantId, avatarColor, passwordHash: hash, mustChangePassword: FORCE_CHANGE },
     });
 
   const superAdmin = await mkUser("علي الحسيني", "super@manarah.io", "SUPER_ADMIN", null, "#7c3aed");

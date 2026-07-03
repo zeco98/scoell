@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import type { UpsertExamResultDto } from "@manarah/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService, type AuditContext } from "../audit/audit.service";
@@ -32,6 +32,10 @@ export class ExamsService {
     const tenantId = requireTenant(user);
     const section = await this.prisma.section.findFirst({ where: { id: dto.sectionId, tenantId } });
     if (!section) throw new BadRequestException("الشعبة غير موجودة");
+    // نطاق المعلم: شعبه فقط (المدير يملك كل شعب المؤسسة)
+    if (user.role === "TEACHER" && section.teacherId !== user.id) {
+      throw new ForbiddenException("لا تملك صلاحية إنشاء امتحان لهذه الشعبة");
+    }
     const exam = await this.prisma.exam.create({
       data: { tenantId, name: dto.name, subject: dto.subject, sectionId: dto.sectionId, year: dto.year, createdById: user.id },
       include: { section: true },
@@ -94,8 +98,26 @@ export class ExamsService {
   /** إدخال/تعديل درجات دفعة واحدة — كل تعديل يسجَّل بقيمته القديمة والجديدة */
   async upsertResults(user: AuthUser, examId: string, rows: UpsertExamResultDto[], ctx: AuditContext) {
     const tenantId = requireTenant(user);
-    const exam = await this.prisma.exam.findFirst({ where: { id: examId, tenantId } });
+    const exam = await this.prisma.exam.findFirst({
+      where: { id: examId, tenantId },
+      include: { section: true },
+    });
     if (!exam) throw new NotFoundException("الامتحان غير موجود");
+    // نطاق المعلم: امتحانات شعبه فقط
+    if (user.role === "TEACHER" && exam.section.teacherId !== user.id) {
+      throw new ForbiddenException("لا تملك صلاحية تعديل درجات هذه الشعبة");
+    }
+
+    // H1 — التحقق أن كل studentId ينتمي فعلًا لشعبة الامتحان (رفض حقن معرّفات أجنبية)
+    const sectionStudents = await this.prisma.student.findMany({
+      where: { sectionId: exam.sectionId, tenantId, archivedAt: null },
+      select: { id: true },
+    });
+    const validIds = new Set(sectionStudents.map((s) => s.id));
+    const invalid = rows.filter((r) => !validIds.has(r.studentId));
+    if (invalid.length > 0) {
+      throw new BadRequestException("تحوي البيانات طلابًا خارج شعبة هذا الامتحان");
+    }
 
     const existing = await this.prisma.examResult.findMany({ where: { examId } });
     const existingMap = new Map(existing.map((r) => [r.studentId, r]));

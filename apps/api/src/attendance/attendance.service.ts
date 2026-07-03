@@ -20,6 +20,14 @@ export class AttendanceService {
   /** قائمة التحضير لشعبة/يوم: الطلاب النشطون + علاماتهم إن وُجدت */
   async sheet(user: AuthUser, sectionId: string, date?: string) {
     const d = date ?? today();
+    // المعلم يقرأ تحضير شعبه فقط
+    if (user.role === "TEACHER") {
+      const owns = await this.prisma.section.findFirst({
+        where: { id: sectionId, teacherId: user.id, ...tenantWhere(user) },
+        select: { id: true },
+      });
+      if (!owns) throw new ForbiddenException("لا تملك صلاحية عرض تحضير هذه الشعبة");
+    }
     const students = await this.prisma.student.findMany({
       where: { sectionId, archivedAt: null, status: "active", ...tenantWhere(user) },
       orderBy: { name: "asc" },
@@ -52,6 +60,21 @@ export class AttendanceService {
       where: { id: dto.sectionId, tenantId },
     });
     if (!section) throw new BadRequestException("الشعبة غير موجودة");
+    // نطاق المعلم: شعبه فقط (المدير يملك كل شعب المؤسسة)
+    if (user.role === "TEACHER" && section.teacherId !== user.id) {
+      throw new ForbiddenException("لا تملك صلاحية تحضير هذه الشعبة");
+    }
+
+    // H2 — قصر الصفوف على طلاب هذه الشعبة فعليًا (رفض حقن معرّفات أجنبية)
+    const sectionStudents = await this.prisma.student.findMany({
+      where: { sectionId: dto.sectionId, tenantId, archivedAt: null },
+      select: { id: true },
+    });
+    const validIds = new Set(sectionStudents.map((s) => s.id));
+    const rows = dto.rows.filter((r) => validIds.has(r.studentId));
+    if (rows.length !== dto.rows.length) {
+      throw new BadRequestException("تحوي البيانات طلابًا خارج هذه الشعبة");
+    }
 
     const existing = await this.prisma.attendanceRecord.findMany({
       where: { sectionId: dto.sectionId, date: dto.date },
@@ -59,7 +82,7 @@ export class AttendanceService {
     const existingMap = new Map(existing.map((r) => [r.studentId, r]));
 
     await this.prisma.$transaction(
-      dto.rows.map((row) =>
+      rows.map((row) =>
         this.prisma.attendanceRecord.upsert({
           where: { studentId_date: { studentId: row.studentId, date: dto.date } },
           create: {
@@ -76,13 +99,13 @@ export class AttendanceService {
       ),
     );
 
-    const absentees = dto.rows.filter((r) => r.mark === "absent");
+    const absentees = rows.filter((r) => r.mark === "absent");
     // إشعار تلقائي لأولياء أمور الغائبين (سياسة قابلة للتعطيل من الإعدادات)
     const settings = await this.tenantSettings(tenantId);
     let notified = 0;
     if (settings.autoAbsenceNotify !== false && absentees.length > 0) {
       const students = await this.prisma.student.findMany({
-        where: { id: { in: absentees.map((a) => a.studentId) } },
+        where: { id: { in: absentees.map((a) => a.studentId) }, tenantId },
         select: { id: true, name: true, guardianUserId: true },
       });
       for (const s of students) {
@@ -97,15 +120,15 @@ export class AttendanceService {
       }
     }
 
-    const changed = dto.rows.filter((r) => existingMap.get(r.studentId)?.mark !== r.mark).length;
+    const changed = rows.filter((r) => existingMap.get(r.studentId)?.mark !== r.mark).length;
     await this.audit.log({
       user,
       tenantId,
-      action: `تحضير الشعبة ${section.stage}/${section.name} ليوم ${dto.date} (${dto.rows.length} طالب، ${absentees.length} غائب)`,
+      action: `تحضير الشعبة ${section.stage}/${section.name} ليوم ${dto.date} (${rows.length} طالب، ${absentees.length} غائب)`,
       entity: "Attendance",
       entityId: `${dto.sectionId}:${dto.date}`,
       before: existing.length > 0 ? { savedMarks: existing.length } : undefined,
-      after: { rows: dto.rows.length, absent: absentees.length, changed },
+      after: { rows: rows.length, absent: absentees.length, changed },
       severity: existing.length > 0 && dto.date !== today() ? "warning" : "info",
       ctx,
     });
