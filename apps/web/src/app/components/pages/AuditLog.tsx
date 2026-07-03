@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
-import { PageHeader, StatusPill, EmptyState } from "../shared";
+import { PageHeader, StatusPill, EmptyState, QueryError } from "../shared";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -54,7 +54,7 @@ export function AuditLog() {
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<AuditItem | null>(null);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["audit", { q, sev, entity, from, to, page }],
     queryFn: () =>
       api.audit.list({
@@ -103,7 +103,9 @@ export function AuditLog() {
           </div>
         </div>
 
-        {isLoading && !data ? (
+        {isError ? (
+          <QueryError error={error} onRetry={() => refetch()} />
+        ) : isLoading && !data ? (
           <div className="space-y-2">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}</div>
         ) : !data || data.items.length === 0 ? (
           <EmptyState icon={ShieldCheck} title="لا سجلات مطابقة" hint="جرّب توسيع الفلاتر." />

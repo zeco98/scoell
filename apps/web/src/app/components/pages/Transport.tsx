@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
-import { PageHeader, SectionCard, EmptyState } from "../shared";
+import { PageHeader, SectionCard, EmptyState, QueryError } from "../shared";
 import { Skeleton } from "../ui/skeleton";
 import { Bus, Phone, MapPin } from "lucide-react";
 
@@ -9,7 +9,7 @@ export function Transport() {
   const { user } = useAuth();
   const isDriver = user?.role === "DRIVER";
 
-  const { data: routes, isLoading } = useQuery({
+  const { data: routes, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["routes", isDriver ? "mine" : "all"],
     queryFn: () => (isDriver ? api.transport.mine() : api.transport.list()),
   });
@@ -21,7 +21,9 @@ export function Transport() {
         subtitle={isDriver ? "مساراتك وطلابك — تحضير الركوب في الإصدارات القادمة" : "مسارات النقل والسائقون"}
       />
 
-      {isLoading ? (
+      {isError ? (
+        <QueryError error={error} onRetry={() => refetch()} />
+      ) : isLoading ? (
         <div className="grid gap-4 lg:grid-cols-2">
           {Array.from({ length: 2 }).map((_, i) => <Skeleton key={i} className="h-64 rounded-xl" />)}
         </div>

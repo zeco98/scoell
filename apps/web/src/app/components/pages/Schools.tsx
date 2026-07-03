@@ -7,7 +7,7 @@ import { formatNum } from "@manarah/shared";
 import type { TenantItem } from "@manarah/api-client";
 import { toast } from "sonner";
 import { api } from "../../lib/api";
-import { PageHeader, StatusPill } from "../shared";
+import { PageHeader, StatusPill, QueryError } from "../shared";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -146,7 +146,7 @@ export function Schools() {
   const [createOpen, setCreateOpen] = useState(false);
   const [managing, setManaging] = useState<TenantItem | null>(null);
 
-  const { data: tenants, isLoading } = useQuery({ queryKey: ["tenants"], queryFn: () => api.tenants.list() });
+  const { data: tenants, isLoading, isError, error, refetch } = useQuery({ queryKey: ["tenants"], queryFn: () => api.tenants.list() });
 
   return (
     <div>
@@ -160,7 +160,9 @@ export function Schools() {
         }
       />
 
-      {isLoading ? (
+      {isError ? (
+        <QueryError error={error} onRetry={() => refetch()} />
+      ) : isLoading ? (
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 mb-6">
           {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-44 rounded-xl" />)}
         </div>

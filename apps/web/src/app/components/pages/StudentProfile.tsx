@@ -5,7 +5,7 @@ import { formatIQD } from "@manarah/shared";
 import { toast } from "sonner";
 import { api } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
-import { PageHeader, SectionCard, StatusPill, EmptyState } from "../shared";
+import { PageHeader, SectionCard, StatusPill, EmptyState, QueryError } from "../shared";
 import { Button } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
@@ -33,7 +33,7 @@ export function StudentProfile() {
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
 
-  const { data: s, isLoading } = useQuery({
+  const { data: s, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["student", id],
     queryFn: () => api.students.detail(id),
     enabled: !!id,
@@ -78,6 +78,17 @@ export function StudentProfile() {
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشلت الأرشفة"),
   });
+
+  if (isError) {
+    return (
+      <div>
+        <Button variant="ghost" size="sm" className="gap-1 mb-3 -mr-2" onClick={() => navigate("/students")}>
+          <ArrowRight size={16} /> عودة للطلبة
+        </Button>
+        <QueryError error={error} onRetry={() => refetch()} />
+      </div>
+    );
+  }
 
   if (isLoading || !s) {
     return (

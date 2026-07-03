@@ -8,7 +8,7 @@ import type { EmployeeItem } from "@manarah/api-client";
 import { toast } from "sonner";
 import { api } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
-import { PageHeader, StatCard, StatusPill, EmptyState } from "../shared";
+import { PageHeader, StatCard, EmptyState, QueryError } from "../shared";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -135,7 +135,7 @@ export function Hr() {
 
   const canEdit = user?.role === "HR";
 
-  const { data: employees, isLoading } = useQuery({ queryKey: ["employees"], queryFn: () => api.hr.list() });
+  const { data: employees, isLoading, isError, error, refetch } = useQuery({ queryKey: ["employees"], queryFn: () => api.hr.list() });
 
   const changeStatus = useMutation({
     mutationFn: ({ id, status }: { id: string; status: string }) => api.hr.update(id, { status } as Partial<EmployeeItem>),
@@ -170,7 +170,9 @@ export function Hr() {
       </div>
 
       <Card className="p-4">
-        {isLoading ? (
+        {isError ? (
+          <QueryError error={error} onRetry={() => refetch()} />
+        ) : isLoading ? (
           <div className="space-y-2">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}</div>
         ) : (employees ?? []).length === 0 ? (
           <EmptyState icon={Users} title="لا موظفين بعد" hint={canEdit ? "أضف أول موظف." : undefined} />

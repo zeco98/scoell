@@ -162,3 +162,16 @@ HR                     → موظفو مؤسسته (CRUD)
 | L7 | (توصية) توثيق Swagger الغني مؤجَّل — التوثيق الوظيفي بكل المسارات والوسوم وbearer موجود على `/api/docs` | — | — |
 
 **اختبارات e2e:** 13/13 خضراء. البناء وtypecheck الويب نظيفان، صفر أزرار ميتة.
+
+### المحطة 4 — واجهة / وصولية / أداء (2026-07-03) ✅
+| البند | الإصلاح | الملف | تحقّق |
+|---|---|---|---|
+| **H3 (جديد)** | `Input` بلا `forwardRef` — ref من react-hook-form لا يصل للعنصر (يكسر focus الخطأ والقراءة) | `ui/input.tsx` | فحص console حيّ كشفه؛ الدخول يعمل بعد الإصلاح |
+| **H4 (جديد)** | `Button` بلا `forwardRef` — يُستخدم كـ Radix `asChild` trigger (Popover/Dropdown) فيفشل ref | `ui/button.tsx` | — |
+| M3 | ErrorBoundary عام + مكوّن `QueryError` بدل «فارغ» على 11 صفحة استعلام | `ErrorBoundary.tsx`, `shared.tsx`, كل صفحات القوائم | البناء نظيف |
+| M6 | تصحيح `index.html`: `lang="ar" dir="rtl"` + عنوان «منارة» (كان `lang=en`/«Read and Execute») + theme-color | `index.html` | معاينة حيّة (RTL صحيح) |
+| L1 | تقسيم الكود: `React.lazy` لكل صفحة + `manualChunks` — الحزمة الواحدة 1.26MB ← **34 chunk**، index 308KB، recharts (518KB) خارج المسار الحرج | `router.tsx`, `vite.config.ts` | تحقّق ببناء الإنتاج |
+
+**ملاحظة H3/H4:** خطآن حقيقيان اكتُشفا بفحص console أثناء التشغيل الحيّ (مكوّنات shadcn من Figma Make فقدت أغلفة forwardRef). مصنّفان High لأنهما يمسّان كل نموذج (RHF) وكل قائمة منسدلة/منبثقة (Radix).
+
+**تحقّق حيّ:** الدخول يُصيّر ويعمل، لوحة المعلومات (lazy) تُحمّل ببيانات حقيقية (22 طالبًا نشطًا)، RTL سليم، صفر أزرار ميتة، typecheck وبناء نظيفان.

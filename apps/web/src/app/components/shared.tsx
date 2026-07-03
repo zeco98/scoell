@@ -2,7 +2,7 @@
 import type { ReactNode } from "react";
 import { Card } from "./ui/card";
 import { Badge } from "./ui/badge";
-import { TrendingUp, TrendingDown, type LucideIcon } from "lucide-react";
+import { TrendingUp, TrendingDown, AlertTriangle, type LucideIcon } from "lucide-react";
 
 export function PageHeader({
   title,
@@ -137,6 +137,25 @@ export function EmptyState({ icon: Icon, title, hint }: { icon: LucideIcon; titl
       </div>
       <p className="text-foreground">{title}</p>
       {hint && <p className="text-muted-foreground max-w-xs">{hint}</p>}
+    </div>
+  );
+}
+
+/** حالة فشل تحميل بيانات — تُميّز الخطأ عن «لا نتائج» وتتيح إعادة المحاولة */
+export function QueryError({ error, onRetry }: { error: unknown; onRetry?: () => void }) {
+  const message = error instanceof Error ? error.message : "تعذّر تحميل البيانات";
+  return (
+    <div role="alert" className="flex flex-col items-center justify-center text-center py-14 gap-3">
+      <div className="size-14 rounded-2xl bg-destructive/10 flex items-center justify-center text-destructive">
+        <AlertTriangle size={26} />
+      </div>
+      <p className="text-foreground">تعذّر تحميل البيانات</p>
+      <p className="text-muted-foreground max-w-xs">{message}</p>
+      {onRetry && (
+        <button onClick={onRetry} className="text-brand hover:underline">
+          إعادة المحاولة
+        </button>
+      )}
     </div>
   );
 }

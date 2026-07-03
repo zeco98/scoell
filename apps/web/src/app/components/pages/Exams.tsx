@@ -6,7 +6,7 @@ import { z } from "zod";
 import { toast } from "sonner";
 import { api } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
-import { PageHeader, StatusPill, EmptyState } from "../shared";
+import { PageHeader, StatusPill, EmptyState, QueryError } from "../shared";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -237,7 +237,7 @@ export function Exams() {
 
   const canEdit = user?.role === "SCHOOL_ADMIN" || user?.role === "TEACHER";
 
-  const { data: exams, isLoading: examsLoading } = useQuery({ queryKey: ["exams"], queryFn: () => api.exams.list() });
+  const { data: exams, isLoading: examsLoading, isError: examsError, error: examsErrObj, refetch: refetchExams } = useQuery({ queryKey: ["exams"], queryFn: () => api.exams.list() });
 
   useEffect(() => {
     if (!selectedExamId && exams?.length) setSelectedExamId(exams[0].id);
@@ -282,7 +282,11 @@ export function Exams() {
         ))}
       </div>
 
-      {!selectedExam ? (
+      {examsError ? (
+        <Card className="p-4">
+          <QueryError error={examsErrObj} onRetry={() => refetchExams()} />
+        </Card>
+      ) : !selectedExam ? (
         !examsLoading && (
           <Card className="p-4">
             <EmptyState icon={ClipboardList} title="لا امتحانات بعد" hint={canEdit ? "أنشئ أول امتحان لبدء إدخال الدرجات." : "لم تُنشأ امتحانات بعد."} />

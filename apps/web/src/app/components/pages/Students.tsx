@@ -8,7 +8,7 @@ import type { CsvImportReport } from "@manarah/api-client";
 import { toast } from "sonner";
 import { api } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
-import { PageHeader, StatusPill, EmptyState } from "../shared";
+import { PageHeader, StatusPill, EmptyState, QueryError } from "../shared";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -237,7 +237,7 @@ export function Students() {
   const [createOpen, setCreateOpen] = useState(false);
   const [importOpen, setImportOpen] = useState(false);
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["students", { q, filter, page }],
     queryFn: () => api.students.list({ query: q || undefined, status: filter, page, pageSize: PAGE_SIZE }),
     placeholderData: (prev) => prev,
@@ -288,7 +288,9 @@ export function Students() {
           </div>
         </div>
 
-        {isLoading && !data ? (
+        {isError ? (
+          <QueryError error={error} onRetry={() => refetch()} />
+        ) : isLoading && !data ? (
           <div className="space-y-2">
             {Array.from({ length: 8 }).map((_, i) => (
               <Skeleton key={i} className="h-14 rounded-lg" />

@@ -3,7 +3,7 @@ import { Link } from "react-router";
 import { ROLE_LABELS, formatIQD } from "@manarah/shared";
 import { api } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
-import { PageHeader, StatCard, SectionCard, StatusPill } from "../shared";
+import { PageHeader, StatCard, SectionCard, StatusPill, QueryError } from "../shared";
 import { Stagger, StaggerItem, CountUp } from "../motion";
 import { Skeleton } from "../ui/skeleton";
 import { Progress } from "../ui/progress";
@@ -56,7 +56,7 @@ const MARK_LABELS: Record<string, string> = { present: "حاضر ✓", absent: "
 
 export function Dashboard() {
   const { user } = useAuth();
-  const { data, isLoading } = useQuery({ queryKey: ["dashboard"], queryFn: () => api.dashboard.get() });
+  const { data, isLoading, isError, error, refetch } = useQuery({ queryKey: ["dashboard"], queryFn: () => api.dashboard.get() });
 
   if (!user) return null;
 
@@ -66,6 +66,15 @@ export function Dashboard() {
       subtitle={`لوحة ${ROLE_LABELS[user.role]} · ${user.tenantName ?? "المنصة"} · ${new Date().toLocaleDateString("ar-IQ", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`}
     />
   );
+
+  if (isError) {
+    return (
+      <div>
+        {header}
+        <QueryError error={error} onRetry={() => refetch()} />
+      </div>
+    );
+  }
 
   if (isLoading || !data) {
     return (

@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { MessageChannel } from "@manarah/shared";
 import { toast } from "sonner";
 import { api } from "../../lib/api";
-import { PageHeader, StatusPill, EmptyState } from "../shared";
+import { PageHeader, StatusPill, EmptyState, QueryError } from "../shared";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -42,7 +42,7 @@ export function Communication() {
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
 
-  const { data: messages, isLoading } = useQuery({ queryKey: ["messages"], queryFn: () => api.messages.list() });
+  const { data: messages, isLoading, isError, error, refetch } = useQuery({ queryKey: ["messages"], queryFn: () => api.messages.list() });
   const { data: sections } = useQuery({
     queryKey: ["sections"],
     queryFn: () => api.sections.list(),
@@ -151,7 +151,9 @@ export function Communication() {
         {/* السجل */}
         <Card className="p-4 lg:col-span-2">
           <h3 className="text-foreground mb-3">سجل الرسائل</h3>
-          {isLoading ? (
+          {isError ? (
+            <QueryError error={error} onRetry={() => refetch()} />
+          ) : isLoading ? (
             <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}</div>
           ) : (messages ?? []).length === 0 ? (
             <EmptyState icon={MessageSquare} title="لا رسائل بعد" hint="أنشئ أول رسالة من النموذج المجاور." />

@@ -34,6 +34,22 @@ export default defineConfig({
   // File types to support raw imports. Never add .css, .tsx, or .ts files to this.
   assetsInclude: ['**/*.svg', '**/*.csv'],
 
+  build: {
+    rollupOptions: {
+      output: {
+        // فصل المكتبات الثقيلة عن كود التطبيق لتحسين التخزين المؤقت وحجم التحميل الأول
+        manualChunks: {
+          'react-vendor': ['react', 'react-dom', 'react-router'],
+          charts: ['recharts'],
+          query: ['@tanstack/react-query'],
+          motion: ['motion'],
+          dnd: ['react-dnd', 'react-dnd-html5-backend'],
+        },
+      },
+    },
+    chunkSizeWarningLimit: 700,
+  },
+
   server: {
     proxy: {
       // نفس الأصل في التطوير — الكوكيات وCORS بلا تعقيد

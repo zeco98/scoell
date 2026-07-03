@@ -9,7 +9,7 @@ import { createAdmissionSchema, type AdmissionStage, type CreateAdmissionDto } f
 import type { AdmissionItem } from "@manarah/api-client";
 import { toast } from "sonner";
 import { api } from "../../lib/api";
-import { PageHeader } from "../shared";
+import { PageHeader, QueryError } from "../shared";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
 import { Input } from "../ui/input";
@@ -192,7 +192,7 @@ export function Admissions() {
   const [rejecting, setRejecting] = useState<AdmissionItem | null>(null);
   const [rejectReason, setRejectReason] = useState("");
 
-  const { data: items, isLoading } = useQuery({ queryKey: ["admissions"], queryFn: () => api.admissions.list() });
+  const { data: items, isLoading, isError, error, refetch } = useQuery({ queryKey: ["admissions"], queryFn: () => api.admissions.list() });
 
   const changeStage = useMutation({
     mutationFn: ({ id, stage, reason }: { id: string; stage: string; reason?: string }) =>
@@ -245,7 +245,9 @@ export function Admissions() {
           }
         />
 
-        {isLoading ? (
+        {isError ? (
+          <QueryError error={error} onRetry={() => refetch()} />
+        ) : isLoading ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
             {Array.from({ length: 5 }).map((_, i) => (
               <Skeleton key={i} className="h-72 rounded-xl" />

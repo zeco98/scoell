@@ -7,7 +7,7 @@ import { createPaymentSchema, formatIQD, PAYMENT_METHOD_LABELS, type CreatePayme
 import { toast } from "sonner";
 import { api } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
-import { PageHeader, StatCard, StatusPill, EmptyState } from "../shared";
+import { PageHeader, StatCard, StatusPill, EmptyState, QueryError } from "../shared";
 import { CountUp } from "../motion";
 import { Card } from "../ui/card";
 import { Button } from "../ui/button";
@@ -281,7 +281,7 @@ export function Fees() {
     queryFn: () => api.fees.stats(),
     enabled: canManage || user?.role === "SUPER_ADMIN" || user?.role === "AUDITOR",
   });
-  const { data: records, isLoading: recordsLoading } = useQuery({
+  const { data: records, isLoading: recordsLoading, isError: recordsError, error: recordsErrObj, refetch: refetchRecords } = useQuery({
     queryKey: ["fees", "records", recordsFilter],
     queryFn: () => api.fees.records({ status: recordsFilter, pageSize: 50 }),
   });
@@ -361,7 +361,9 @@ export function Fees() {
                 </Button>
               ))}
             </div>
-            {recordsLoading ? (
+            {recordsError ? (
+              <QueryError error={recordsErrObj} onRetry={() => refetchRecords()} />
+            ) : recordsLoading ? (
               <div className="space-y-2">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-lg" />)}</div>
             ) : (records?.items ?? []).length === 0 ? (
               <EmptyState icon={Wallet} title="لا أقساط مطابقة" />
