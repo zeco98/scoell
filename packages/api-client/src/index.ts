@@ -178,6 +178,11 @@ export class ManarahClient {
       form.append("file", file);
       return this.request<CsvImportReport>("POST", "/students/import", form, true);
     },
+    uploadDocument: (id: string, file: File | Blob) => {
+      const form = new FormData();
+      form.append("file", file);
+      return this.request<{ id: string; fileName: string }>("POST", `/students/${id}/documents`, form, true);
+    },
   };
 
   sections = {

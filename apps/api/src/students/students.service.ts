@@ -259,6 +259,48 @@ export class StudentsService {
     return { ok: true };
   }
 
+  /** تخزين وثائق محلي (uploads/) — استبداله بـ S3 لاحقًا يغيّر هذه الدالة فقط */
+  async uploadDocument(
+    user: AuthUser,
+    studentId: string,
+    file: { originalname: string; mimetype: string; size: number; buffer: Buffer },
+    ctx: AuditContext,
+  ) {
+    const tenantId = requireTenant(user);
+    const student = await this.prisma.student.findFirst({ where: { id: studentId, tenantId } });
+    if (!student) throw new NotFoundException("الطالب غير موجود");
+    if (file.size > 10 * 1024 * 1024) throw new BadRequestException("الحد الأقصى للملف 10MB");
+
+    const { mkdir, writeFile } = await import("fs/promises");
+    const { join } = await import("path");
+    const dir = join(process.cwd(), "uploads", tenantId);
+    await mkdir(dir, { recursive: true });
+    const storageKey = `${tenantId}/${Date.now()}-${file.originalname.replace(/[^\w.؀-ۿ-]/g, "_")}`;
+    await writeFile(join(process.cwd(), "uploads", storageKey), file.buffer);
+
+    const asset = await this.prisma.fileAsset.create({
+      data: {
+        tenantId,
+        studentId,
+        fileName: file.originalname,
+        mimeType: file.mimetype,
+        size: file.size,
+        storageKey,
+        uploadedBy: user.id,
+      },
+    });
+    await this.audit.log({
+      user,
+      tenantId,
+      action: `رفع وثيقة «${file.originalname}» للطالب ${student.name}`,
+      entity: "FileAsset",
+      entityId: asset.id,
+      after: { fileName: file.originalname, size: file.size },
+      ctx,
+    });
+    return asset;
+  }
+
   /** استيراد CSV: name,gender,stage,section,guardianName,guardianPhone — تقرير خطأ لكل صف مرفوض */
   async importCsv(user: AuthUser, buffer: Buffer, ctx: AuditContext) {
     const tenantId = requireTenant(user);

@@ -114,4 +114,17 @@ export class StudentsController {
   ) {
     return this.students.importCsv(user, file.buffer, ctx(req));
   }
+
+  /** رفع وثيقة لطالب (هوية، بطاقة سكن...) — تخزين محلي S3-ready */
+  @Post(":id/documents")
+  @Roles("SCHOOL_ADMIN")
+  @UseInterceptors(FileInterceptor("file"))
+  uploadDocument(
+    @Param("id") id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.students.uploadDocument(user, id, file, ctx(req));
+  }
 }
