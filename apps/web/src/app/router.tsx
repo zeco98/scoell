@@ -3,6 +3,7 @@ import { RequireAuth, RequireRole } from "./auth/guards";
 import { Layout } from "./Layout";
 import { Login } from "./components/Login";
 import { NotFound } from "./components/pages/ErrorPages";
+import { RouteError } from "./components/pages/ErrorPages";
 
 // تقسيم الكود: كل صفحة مصادَقة تُحمَّل عند الحاجة (lazy) لتقليل حجم التحميل الأول.
 // Login وصفحات الأخطاء تبقى eager لأنها مطلوبة فورًا.
@@ -17,6 +18,8 @@ export const router = createBrowserRouter([
           { path: "/", element: <Navigate to="/dashboard" replace /> },
           {
             element: <RequireRole />,
+            // أي خطأ رسم داخل صفحة يُلتقط هنا ويُعرض بهوية منارة داخل القشرة
+            errorElement: <RouteError />,
             children: [
               { path: "/dashboard", lazy: async () => ({ Component: (await import("./components/pages/Dashboard")).Dashboard }) },
               { path: "/schools", lazy: async () => ({ Component: (await import("./components/pages/Schools")).Schools }) },

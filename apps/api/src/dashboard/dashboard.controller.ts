@@ -80,6 +80,7 @@ export class DashboardController {
             grade: r.grade,
           })),
         })),
+        recentAudit: [], // ثابت في الشكل عبر كل الأدوار (ولي الأمر لا يرى التدقيق)
       };
     }
 

@@ -170,10 +170,10 @@ export function Dashboard() {
           </SectionCard>
         )}
 
-        {data.recentAudit.length > 0 && (
+        {(data.recentAudit?.length ?? 0) > 0 && (
           <SectionCard title="آخر النشاطات">
             <div className="space-y-3">
-              {data.recentAudit.map((a) => (
+              {(data.recentAudit ?? []).map((a) => (
                 <div key={a.id} className="flex items-start gap-3">
                   <div className="size-2 rounded-full mt-2 shrink-0" style={{ background: a.severity === "critical" ? "var(--destructive)" : a.severity === "warning" ? "var(--warning)" : "var(--brand)" }} />
                   <div className="flex-1 min-w-0">

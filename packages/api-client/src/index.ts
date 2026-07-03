@@ -79,9 +79,13 @@ export class ManarahClient {
     });
   }
 
+  // مسارات لا يُحاوَل التجديد عند فشلها (تمنع حلقة لا نهائية):
+  // login/refresh/logout فقط — أما /auth/me فيجب أن يُجدِّد ليُستأنف عند إعادة التحميل
+  private static NO_REFRESH = ["/auth/login", "/auth/refresh", "/auth/logout"];
+
   private async request<T>(method: string, path: string, body?: unknown, isForm = false): Promise<T> {
     let res = await this.raw(method, path, body, isForm);
-    if (res.status === 401 && !path.startsWith("/auth/")) {
+    if (res.status === 401 && !ManarahClient.NO_REFRESH.some((p) => path.startsWith(p))) {
       const ok = await this.tryRefresh();
       if (!ok) {
         this.onSessionExpired();

@@ -1,7 +1,7 @@
-import { Link } from "react-router";
+import { Link, useRouteError } from "react-router";
 import { Button } from "../ui/button";
 import { LogoMark } from "../../brand/Logo";
-import { ShieldOff, Compass } from "lucide-react";
+import { ShieldOff, Compass, AlertTriangle } from "lucide-react";
 
 function ErrorShell({
   icon,
@@ -52,5 +52,30 @@ export function NotFound() {
       title="الصفحة غير موجودة"
       hint="الرابط الذي فتحته غير صحيح أو أُزيلت صفحته."
     />
+  );
+}
+
+/** يُلتقط أخطاء رسم الصفحات عبر React Router errorElement — بهوية منارة */
+export function RouteError() {
+  const error = useRouteError();
+  // eslint-disable-next-line no-console
+  console.error("RouteError:", error);
+  return (
+    <div dir="rtl" className="min-h-[70vh] flex flex-col items-center justify-center text-center gap-4 p-8">
+      <LogoMark size={52} />
+      <div className="flex items-center gap-2 text-destructive">
+        <AlertTriangle size={40} />
+        <h1 className="text-foreground">تعذّر عرض هذه الصفحة</h1>
+      </div>
+      <p className="text-muted-foreground max-w-sm">
+        واجهت الصفحة مشكلة غير متوقعة. أعد المحاولة، وإن استمر الأمر راجع الدعم الفني.
+      </p>
+      <div className="flex gap-2">
+        <Button onClick={() => window.location.reload()}>إعادة التحميل</Button>
+        <Button variant="outline" asChild>
+          <Link to="/dashboard">لوحة المعلومات</Link>
+        </Button>
+      </div>
+    </div>
   );
 }

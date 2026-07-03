@@ -14,5 +14,8 @@ prisma/test.db
 prisma/test.db-journal
 apps/api/uploads/
 uploads/
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/.playwright/
 apps/desktop/src-tauri/target/
 releases/

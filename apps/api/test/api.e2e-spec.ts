@@ -62,6 +62,8 @@ describe("Manarah API (e2e)", () => {
     const teacherA = await mk("معلم أ", "teacher-a@test.io", "TEACHER", tenantA.id);
     await mk("معلم آخر أ", "teacher2-a@test.io", "TEACHER", tenantA.id); // معلم لا يملك الشعبة
     await mk("مدير ب", "admin-b@test.io", "SCHOOL_ADMIN", tenantB.id);
+    await mk("مدقق", "auditor@test.io", "AUDITOR", null); // دور منصة للقراءة فقط
+    await mk("موارد بشرية أ", "hr-a@test.io", "HR", tenantA.id);
 
     // شعبة المؤسسة أ مملوكة للمعلم أ
     const section = await prisma.section.create({
@@ -343,6 +345,36 @@ describe("Manarah API (e2e)", () => {
       .set("Authorization", `Bearer ${admin.accessToken}`)
       .attach("file", Buffer.from("%PDF-1.4 fake"), { filename: "id.pdf", contentType: "application/pdf" })
       .expect(201);
+  });
+
+  // 14 — RBAC: المدقّق للقراءة فقط (يقرأ التدقيق، لا ينشئ طالبًا)
+  it("RBAC AUDITOR: يقرأ سجل التدقيق لكنه ممنوع من إنشاء طالب", async () => {
+    const auditor = await login("auditor@test.io");
+    await request(app.getHttpServer())
+      .get("/api/audit")
+      .set("Authorization", `Bearer ${auditor.accessToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .post("/api/students")
+      .set("Authorization", `Bearer ${auditor.accessToken}`)
+      .send({ name: "محاولة", gender: "MALE", stage: "الأول", section: "أ", guardianName: "x", guardianPhone: "07701234567" })
+      .expect(403);
+  });
+
+  // 15 — RBAC: HR يدير الموظفين، ومدير المدرسة ممنوع من إنشائهم (HR حصرًا)
+  it("RBAC HR: HR ينشئ موظفًا ومدير المدرسة لا", async () => {
+    const hr = await login("hr-a@test.io");
+    await request(app.getHttpServer())
+      .post("/api/employees")
+      .set("Authorization", `Bearer ${hr.accessToken}`)
+      .send({ name: "قاسم الحارس", title: "حارس", contractType: "full_time" })
+      .expect(201);
+    const admin = await login("admin-a@test.io");
+    await request(app.getHttpServer())
+      .post("/api/employees")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ name: "x", title: "y", contractType: "full_time" })
+      .expect(403);
   });
 
   // 13 — M4: قيمة حالة غير صالحة تُرفض بتحقق zod (400)، والخطأ بالشكل الموحّد
