@@ -45,3 +45,20 @@ export function requireTenant(user: AuthUser, explicit?: string): string {
   if (!t) throw new Error("العملية تتطلب تحديد المؤسسة");
   return t;
 }
+
+/**
+ * شرط تقييد أي استعلام على كيان Student (أو علاقة إليه) بمالكه الفعلي حسب الدور:
+ * PARENT → أبناؤه (guardianUserId) · STUDENT → سجله الخاص فقط (studentUserId) · غيرهما → بلا قيد إضافي.
+ * يُستخدم لإغلاق ثغرات IDOR في أي مسار قراءة يخص PARENT/STUDENT (طلبة، درجات، حضور، رسوم).
+ */
+export function ownStudentWhere(user: AuthUser): Record<string, unknown> {
+  if (user.role === "PARENT") return { guardianUserId: user.id };
+  if (user.role === "STUDENT") return { studentUserId: user.id };
+  return {};
+}
+
+/** نفس القيد أعلاه لكن عبر علاقة `student` متداخلة (attendance/payments/feeRecords إلخ) */
+export function ownStudentRelationWhere(user: AuthUser): Record<string, unknown> {
+  const inner = ownStudentWhere(user);
+  return Object.keys(inner).length ? { student: inner } : {};
+}

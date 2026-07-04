@@ -2,7 +2,15 @@ import { BadRequestException, ForbiddenException, Injectable, NotFoundException 
 import type { CreatePaymentDto } from "@manarah/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService, type AuditContext } from "../audit/audit.service";
-import { tenantWhere, requireTenant, computeFeeStatus as feeStatus, type AuthUser } from "../common/types";
+import {
+  tenantWhere,
+  requireTenant,
+  ownStudentRelationWhere,
+  computeFeeStatus as feeStatus,
+  type AuthUser,
+} from "../common/types";
+
+const OWN_SCOPE_ROLES: AuthUser["role"][] = ["PARENT", "STUDENT"];
 
 @Injectable()
 export class FeesService {
@@ -15,7 +23,7 @@ export class FeesService {
     const page = Math.max(1, q.page ?? 1);
     const pageSize = Math.min(100, Math.max(5, q.pageSize ?? 20));
     const where = {
-      ...(user.role === "PARENT" ? { student: { guardianUserId: user.id } } : tenantWhere(user)),
+      ...(OWN_SCOPE_ROLES.includes(user.role) ? ownStudentRelationWhere(user) : tenantWhere(user)),
       ...(q.status && q.status !== "all" ? { status: q.status } : {}),
       ...(q.query ? { student: { name: { contains: q.query } } } : {}),
     };
@@ -60,7 +68,7 @@ export class FeesService {
     const page = Math.max(1, q.page ?? 1);
     const pageSize = Math.min(100, Math.max(5, q.pageSize ?? 20));
     const where = {
-      ...(user.role === "PARENT" ? { student: { guardianUserId: user.id } } : tenantWhere(user)),
+      ...(OWN_SCOPE_ROLES.includes(user.role) ? ownStudentRelationWhere(user) : tenantWhere(user)),
       voidedAt: null,
       ...(q.query
         ? { OR: [{ receiptNo: { contains: q.query } }, { student: { name: { contains: q.query } } }] }
@@ -210,7 +218,7 @@ export class FeesService {
     const payment = await this.prisma.payment.findFirst({
       where: {
         id,
-        ...(user.role === "PARENT" ? { student: { guardianUserId: user.id } } : tenantWhere(user)),
+        ...(OWN_SCOPE_ROLES.includes(user.role) ? ownStudentRelationWhere(user) : tenantWhere(user)),
       },
       include: {
         student: { include: { section: true } },

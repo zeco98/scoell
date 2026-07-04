@@ -3,7 +3,7 @@ import type { BulkAttendanceDto } from "@manarah/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService, type AuditContext } from "../audit/audit.service";
 import { NotificationsService } from "../notifications/notifications.service";
-import { tenantWhere, requireTenant, type AuthUser } from "../common/types";
+import { tenantWhere, requireTenant, ownStudentRelationWhere, type AuthUser } from "../common/types";
 
 function today(): string {
   return new Date().toISOString().slice(0, 10);
@@ -153,11 +153,26 @@ export class AttendanceService {
   }
 
   async report(user: AuthUser, q: { sectionId?: string; from?: string; to?: string; studentId?: string }) {
+    // H3 — نطاق المعلم: شعبه فقط (كان بلا أي تحقق ownership لهذا المسار)
+    let sectionScope: Record<string, unknown> = q.sectionId ? { sectionId: q.sectionId } : {};
+    if (user.role === "TEACHER") {
+      const ownSections = await this.prisma.section.findMany({
+        where: { teacherId: user.id, ...tenantWhere(user) },
+        select: { id: true },
+      });
+      const ownIds = ownSections.map((s) => s.id);
+      if (q.sectionId && !ownIds.includes(q.sectionId)) {
+        throw new ForbiddenException("لا تملك صلاحية عرض تقرير هذه الشعبة");
+      }
+      sectionScope = { sectionId: q.sectionId ?? { in: ownIds } };
+    }
+
     const where = {
       ...tenantWhere(user),
-      ...(q.sectionId ? { sectionId: q.sectionId } : {}),
+      ...sectionScope,
       ...(q.studentId ? { studentId: q.studentId } : {}),
-      ...(user.role === "PARENT" ? { student: { guardianUserId: user.id } } : {}),
+      // M1 — الطالب يرى حضوره الخاص فقط (كان مستبعدًا كليًا من هذا المسار)
+      ...ownStudentRelationWhere(user),
       ...(q.from || q.to
         ? { date: { ...(q.from ? { gte: q.from } : {}), ...(q.to ? { lte: q.to } : {}) } }
         : {}),

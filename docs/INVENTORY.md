@@ -153,7 +153,7 @@
 | الحضور Attendance | R (all) | CRU (tenant) + بأثر رجعي | R (tenant) | CRU (شعبه، يومه) | R (أبناؤه) | R (own) | CRU (ركوب النقل) | — | R (all) |
 | خطط الرسوم FeePlans | R (all) | CRUD (tenant) | CRUD (tenant) | — | — | — | — | — | R (all) |
 | الأقساط FeeRecords | R (all) | R (tenant) | CRU (tenant) | — | R (أبناؤه) | R (own) | — | — | R (all) |
-| السندات Payments | R + D (بقيد audit فقط) | R (tenant) | CR (tenant)، **لا حذف** | — | R (أبناؤه) | — | — | — | R (all) |
+| السندات Payments | R + D (بقيد audit فقط) | R (tenant) | CR (tenant)، **لا حذف** | — | R (أبناؤه) | R (own) | — | — | R (all) |
 | الخصومات Discounts | R (all) | CRU (tenant) | CRU (tenant) | — | R (أبناؤه) | — | — | — | R (all) |
 | الامتحانات Exams | R (all) | CRUD (tenant) | — | CRU (مواده) | — | — | — | — | R (all) |
 | الدرجات ExamResults | R + D (بقيد audit فقط) | RU (tenant) | — | CRU (مواده، كل تعديل بقيمتيه) | R (أبناؤه)* | R (own)* | — | — | R (all) |

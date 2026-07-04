@@ -17,6 +17,10 @@ import {
   GraduationCap,
   AlertTriangle,
   Receipt,
+  BookOpen,
+  Bus,
+  Briefcase,
+  ClipboardList,
 } from "lucide-react";
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from "recharts";
 
@@ -217,6 +221,66 @@ export function Dashboard() {
             </div>
           </SectionCard>
         </div>
+      )}
+
+      {/* بطاقات المعلم — شعبه فقط، بلا أي بيانات مالية أو إدارية */}
+      {data.teacher && (
+        <>
+          <Stagger className={grid}>
+            <StaggerItem><StatCard icon={BookOpen} label="شعبي الدراسية" value="" render={<CountUp value={data.teacher.sectionsCount} />} /></StaggerItem>
+            <StaggerItem><StatCard icon={Users} label="طلابي" value="" render={<CountUp value={data.teacher.studentsCount} />} tone="info" /></StaggerItem>
+            <StaggerItem><StatCard icon={CalendarCheck} label="حضور اليوم" value="" render={<CountUp value={data.teacher.presentToday} />} hint={`غياب ${data.teacher.absentToday} · تأخر ${data.teacher.lateToday}`} tone="success" /></StaggerItem>
+            <StaggerItem><StatCard icon={ClipboardList} label="غائبو اليوم" value="" render={<CountUp value={data.teacher.absentToday} />} tone="warning" /></StaggerItem>
+          </Stagger>
+          <SectionCard title="شعبي">
+            <div className="space-y-2">
+              {data.teacher.sections.map((s) => (
+                <div key={s.id} className="flex items-center justify-between">
+                  <span className="text-foreground">{s.label}</span>
+                  <span className="text-muted-foreground">{s.students} طالب</span>
+                </div>
+              ))}
+            </div>
+          </SectionCard>
+        </>
+      )}
+
+      {/* بطاقة الطالب — بياناته الخاصة فقط */}
+      {data.student && (
+        <Stagger className={grid}>
+          <StaggerItem><StatCard icon={CalendarCheck} label="نسبة حضوري" value={data.student.attendanceRate != null ? `${data.student.attendanceRate}%` : "—"} tone="success" /></StaggerItem>
+          <StaggerItem><StatCard icon={GraduationCap} label="حالتي اليوم" value={data.student.todayMark ? MARK_LABELS[data.student.todayMark] : "لم يُسجَّل"} tone="info" /></StaggerItem>
+          <StaggerItem><StatCard icon={ClipboardList} label="آخر نتيجة" value={data.student.recentResults[0] ? `${data.student.recentResults[0].total}/100` : "—"} tone="brand" /></StaggerItem>
+        </Stagger>
+      )}
+      {data.student && data.student.recentResults.length > 0 && (
+        <SectionCard title="نتائجي الأخيرة">
+          <div className="space-y-2">
+            {data.student.recentResults.map((r, i) => (
+              <div key={i} className="flex items-center justify-between">
+                <span className="text-foreground">{r.exam} — {r.subject}</span>
+                <span className="text-brand" style={{ fontWeight: 700 }}>{r.total}/100 · {r.grade}</span>
+              </div>
+            ))}
+          </div>
+        </SectionCard>
+      )}
+
+      {/* بطاقات الموارد البشرية — عدد الموظفين فقط، بلا إيرادات */}
+      {data.hr && (
+        <Stagger className="grid gap-4 sm:grid-cols-3 mb-6">
+          <StaggerItem><StatCard icon={Briefcase} label="إجمالي الموظفين" value="" render={<CountUp value={data.hr.totalEmployees} />} /></StaggerItem>
+          <StaggerItem><StatCard icon={Briefcase} label="على رأس العمل" value="" render={<CountUp value={data.hr.activeEmployees} />} tone="success" /></StaggerItem>
+          <StaggerItem><StatCard icon={Briefcase} label="في إجازة" value="" render={<CountUp value={data.hr.onLeave} />} tone="warning" /></StaggerItem>
+        </Stagger>
+      )}
+
+      {/* بطاقات السائق — مساراته وطلابها فقط */}
+      {data.driver && (
+        <Stagger className="grid gap-4 sm:grid-cols-2 mb-6">
+          <StaggerItem><StatCard icon={Bus} label="مساراتي" value="" render={<CountUp value={data.driver.routesCount} />} /></StaggerItem>
+          <StaggerItem><StatCard icon={Users} label="طلابي على المسار" value="" render={<CountUp value={data.driver.studentsCount} />} tone="info" /></StaggerItem>
+        </Stagger>
       )}
     </div>
   );

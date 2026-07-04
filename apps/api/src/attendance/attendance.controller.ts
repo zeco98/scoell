@@ -40,7 +40,7 @@ export class AttendanceController {
   }
 
   @Get("report")
-  @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER", "PARENT", "AUDITOR")
+  @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER", "PARENT", "STUDENT", "AUDITOR")
   report(
     @CurrentUser() user: AuthUser,
     @Query("sectionId") sectionId?: string,

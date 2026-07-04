@@ -101,7 +101,8 @@ async function main() {
   const statuses = ["active", "active", "active", "active", "suspended", "graduated", "withdrawn"];
   const students = [];
   for (let i = 0; i < 36; i++) {
-    const name = `${pick(FIRST, i * 3)} ${pick(LAST, i * 7 + 1)}`;
+    // الطالب رقم 0 هو نفسه صاحب حساب STUDENT التجريبي (محمد الساعدي)، وابن ولي الأمر التجريبي
+    const name = i === 0 ? "محمد الساعدي" : `${pick(FIRST, i * 3)} ${pick(LAST, i * 7 + 1)}`;
     const guardian = `${pick(FIRST, i + 6)} ${pick(LAST, i * 7 + 1)}`;
     const stage = pick(STAGES, i);
     const section = pick(SECTION_NAMES, i);
@@ -117,6 +118,8 @@ async function main() {
           guardianPhone: `0770${(1000000 + i * 13457).toString().slice(0, 7)}`,
           // أول طالبين لولي الأمر التجريبي (كما في الواجهة القديمة)
           guardianUserId: i < 2 ? parent.id : null,
+          // ربط 1:1 بحساب STUDENT التجريبي — أساس كل فحوص ownership لهذا الدور
+          studentUserId: i === 0 ? studentUser.id : null,
           status: pick(statuses, i),
           routeId: i % 5 === 0 ? route.id : null,
           enrolledAt: new Date(`2024-09-${(1 + (i % 27)).toString().padStart(2, "0")}`),

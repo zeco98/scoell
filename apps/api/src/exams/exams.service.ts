@@ -17,8 +17,10 @@ export class ExamsService {
   ) {}
 
   list(user: AuthUser) {
+    // نطاق المعلم: امتحانات شعبه فقط (وإلا يرى درجات طلاب خارج مسؤوليته)
+    const teacherScope = user.role === "TEACHER" ? { section: { teacherId: user.id } } : {};
     return this.prisma.exam.findMany({
-      where: tenantWhere(user),
+      where: { ...tenantWhere(user), ...teacherScope },
       include: { section: true, _count: { select: { results: true } } },
       orderBy: { createdAt: "desc" },
       take: 200, // سقف أمان
@@ -59,18 +61,30 @@ export class ExamsService {
       include: { section: true, tenant: true },
     });
     if (!exam) throw new NotFoundException("الامتحان غير موجود");
+    // نطاق المعلم: نتائج شعبه فقط (لا يرى درجات طلاب معلم آخر)
+    if (user.role === "TEACHER" && exam.section.teacherId !== user.id) {
+      throw new ForbiddenException("لا تملك صلاحية عرض نتائج هذه الشعبة");
+    }
 
-    let results = await this.prisma.examResult.findMany({
+    const raw = await this.prisma.examResult.findMany({
       where: { examId },
-      include: { student: { select: { id: true, name: true, code: true, guardianUserId: true } } },
+      include: {
+        student: { select: { id: true, name: true, code: true, guardianUserId: true, studentUserId: true } },
+      },
       orderBy: { total: "desc" },
     });
+
+    // الترتيب يُحتسب على الشعبة كاملة أولًا — يبقى صحيحًا حتى بعد تقييد العرض لاحقًا لـ PARENT/STUDENT
+    let results = raw.map((r, i) => ({ ...r, rank: i + 1 }));
+    const classSize = raw.length;
 
     // سياسة حجب النتائج عند الديون — تُطبَّق server-side على أدوار العرض
     if (user.role === "PARENT" || user.role === "STUDENT") {
       const settings = JSON.parse(exam.tenant.settings || "{}");
+      // C2 — كان الطالب يمرّ بشرط `true` أي يرى كشف الشعبة كاملًا (كل الأسماء والدرجات)؛
+      // الآن يُقيَّد بسجله الخاص فقط عبر studentUserId، تمامًا كما PARENT عبر guardianUserId.
       results = results.filter((r) =>
-        user.role === "PARENT" ? r.student.guardianUserId === user.id : true,
+        user.role === "PARENT" ? r.student.guardianUserId === user.id : r.student.studentUserId === user.id,
       );
       if (settings.blockResultsOnDebt) {
         const ids = results.map((r) => r.studentId);
@@ -90,10 +104,7 @@ export class ExamsService {
       }
     }
 
-    return {
-      exam,
-      results: results.map((r, i) => ({ ...r, rank: r.total >= 0 ? i + 1 : null })),
-    };
+    return { exam, results, classSize };
   }
 
   /** إدخال/تعديل درجات دفعة واحدة — كل تعديل يسجَّل بقيمته القديمة والجديدة */
@@ -169,21 +180,24 @@ export class ExamsService {
 
   /** كشف درجات الطالب (A4 print-ready بهوية منارة) */
   async reportCardHtml(user: AuthUser, examId: string, studentId: string) {
-    const { exam, results } = await this.results(user, examId);
+    // C3 — نتيجة results() مقيَّدة الآن بمالكها لـ PARENT/STUDENT، فطلب studentId أجنبي
+    // لن يُعثر عليه هنا أصلًا (404) بدل تسريب كشف طالب آخر.
+    const { exam, results, classSize } = await this.results(user, examId);
     const mine = results.find((r) => r.studentId === studentId);
     if (!mine) throw new NotFoundException("لا توجد نتيجة لهذا الطالب");
     if (mine.total < 0) throw new BadRequestException("النتيجة محجوبة لوجود ذمة مالية — راجع الإدارة");
-    const student = await this.prisma.student.findUnique({
-      where: { id: studentId },
+    const student = await this.prisma.student.findFirst({
+      where: { id: studentId, ...tenantWhere(user) },
       include: { section: true },
     });
+    if (!student) throw new NotFoundException("الطالب غير موجود");
     return renderReportCardHtml({
       tenantName: exam.tenant.name,
       examName: exam.name,
       year: exam.year,
-      student: { name: student!.name, code: student!.code, section: student!.section },
+      student: { name: student.name, code: student.code, section: student.section },
       rank: mine.rank ?? 0,
-      classSize: results.length,
+      classSize,
       rows: [
         {
           subject: exam.subject,

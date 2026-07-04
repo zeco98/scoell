@@ -3,7 +3,7 @@ import { parse } from "csv-parse/sync";
 import type { CreateStudentDto } from "@manarah/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService, type AuditContext } from "../audit/audit.service";
-import { tenantWhere, requireTenant, type AuthUser } from "../common/types";
+import { tenantWhere, requireTenant, ownStudentWhere, type AuthUser } from "../common/types";
 
 @Injectable()
 export class StudentsService {
@@ -12,12 +12,10 @@ export class StudentsService {
     private readonly audit: AuditService,
   ) {}
 
-  /** ولي الأمر يرى أبناءه فقط؛ المعلم طلاب شعبه؛ البقية حسب عزل المؤسسة */
+  /** ولي الأمر يرى أبناءه فقط؛ الطالب يرى سجله فقط (صف واحد)؛ البقية حسب عزل المؤسسة */
   private async scopeFor(user: AuthUser) {
-    if (user.role === "PARENT") return { guardianUserId: user.id, archivedAt: null };
-    if (user.role === "STUDENT") {
-      // حساب الطالب مربوط عبر البريد في الـ seed — نبحث بالمعرف المرتبط
-      return { guardianUserId: "__none__", ...tenantWhere(user) }; // الطالب لا يرى قائمة الطلبة
+    if (user.role === "PARENT" || user.role === "STUDENT") {
+      return { ...ownStudentWhere(user), archivedAt: null };
     }
     return { ...tenantWhere(user), archivedAt: null };
   }
@@ -114,6 +112,10 @@ export class StudentsService {
     });
     if (!student) throw new NotFoundException("الطالب غير موجود");
     if (user.role === "PARENT" && student.guardianUserId !== user.id) {
+      throw new ForbiddenException("لا تملك صلاحية عرض هذا الطالب");
+    }
+    // C1 — الطالب يرى سجله الخاص فقط (كان بلا أي تحقق ownership لهذا الدور)
+    if (user.role === "STUDENT" && student.studentUserId !== user.id) {
       throw new ForbiddenException("لا تملك صلاحية عرض هذا الطالب");
     }
     const totalFees = student.feeRecords.reduce((a, f) => a + f.total, 0);

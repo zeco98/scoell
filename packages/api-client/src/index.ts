@@ -579,5 +579,26 @@ export interface DashboardPayload {
     balance: number;
     recentResults: { exam: string; subject: string; total: number; grade: string }[];
   }[];
+  /** الطالب: بياناته الخاصة فقط — لا حقول مالية/إدارية للمؤسسة */
+  student?: {
+    name: string;
+    section: string | null;
+    todayMark: string | null;
+    attendanceRate: number | null;
+    recentResults: { exam: string; subject: string; total: number; grade: string }[];
+  } | null;
+  /** المعلم: شعبه فقط — لا حقول مالية/إدارية للمؤسسة */
+  teacher?: {
+    sectionsCount: number;
+    studentsCount: number;
+    presentToday: number;
+    absentToday: number;
+    lateToday: number;
+    sections: { id: string; label: string; students: number }[];
+  };
+  /** الموارد البشرية: عدد الموظفين فقط */
+  hr?: { totalEmployees: number; activeEmployees: number; onLeave: number };
+  /** السائق: مساراته وطلابها فقط */
+  driver?: { routesCount: number; studentsCount: number; routes: { id: string; name: string; students: number }[] };
   recentAudit: { id: string; userName: string; action: string; severity: string; createdAt: string }[];
 }

@@ -31,7 +31,7 @@ export class FeesController {
   constructor(private readonly fees: FeesService) {}
 
   @Get("fees")
-  @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "PARENT", "AUDITOR")
+  @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "PARENT", "STUDENT", "AUDITOR")
   listRecords(
     @CurrentUser() user: AuthUser,
     @Query("status") status?: string,
@@ -64,7 +64,7 @@ export class FeesController {
   }
 
   @Get("payments")
-  @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "PARENT", "AUDITOR")
+  @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "PARENT", "STUDENT", "AUDITOR")
   listPayments(
     @CurrentUser() user: AuthUser,
     @Query("query") query?: string,
@@ -101,7 +101,7 @@ export class FeesController {
 
   /** سند القبض بصيغة قابلة للطباعة (A5، هوية منارة) — window.print() في العميل يخرجه PDF/طابعة */
   @Get("payments/:id/receipt")
-  @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "PARENT", "AUDITOR")
+  @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "PARENT", "STUDENT", "AUDITOR")
   async receipt(
     @Param("id") id: string,
     @CurrentUser() user: AuthUser,

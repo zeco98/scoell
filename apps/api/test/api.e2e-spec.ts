@@ -61,9 +61,11 @@ describe("Manarah API (e2e)", () => {
     await mk("محاسب أ", "acc-a@test.io", "ACCOUNTANT", tenantA.id);
     const teacherA = await mk("معلم أ", "teacher-a@test.io", "TEACHER", tenantA.id);
     await mk("معلم آخر أ", "teacher2-a@test.io", "TEACHER", tenantA.id); // معلم لا يملك الشعبة
-    await mk("مدير ب", "admin-b@test.io", "SCHOOL_ADMIN", tenantB.id);
+    const adminB = await mk("مدير ب", "admin-b@test.io", "SCHOOL_ADMIN", tenantB.id);
     await mk("مدقق", "auditor@test.io", "AUDITOR", null); // دور منصة للقراءة فقط
     await mk("موارد بشرية أ", "hr-a@test.io", "HR", tenantA.id);
+    const studentUserA = await mk("طالب الاختبار الأول", "student-a@test.io", "STUDENT", tenantA.id);
+    ids.adminB = adminB.id;
 
     // شعبة المؤسسة أ مملوكة للمعلم أ
     const section = await prisma.section.create({
@@ -80,9 +82,24 @@ describe("Manarah API (e2e)", () => {
         sectionId: section.id,
         guardianName: "ولي الاختبار",
         guardianPhone: "07701234567",
+        studentUserId: studentUserA.id, // ربط 1:1 بحساب STUDENT التجريبي
       },
     });
     ids.student = student.id;
+
+    // زميل في نفس الشعبة — بلا أي ربط مستخدم — لاختبار أن الطالب لا يرى زميله
+    const classmate = await prisma.student.create({
+      data: {
+        tenantId: tenantA.id,
+        code: "st1001",
+        name: "زميل الصف",
+        gender: "MALE",
+        sectionId: section.id,
+        guardianName: "ولي الزميل",
+        guardianPhone: "07701234599",
+      },
+    });
+    ids.classmate = classmate.id;
 
     // طالب في المؤسسة ب — لاختبار حقن معرّف أجنبي
     const sectionB = await prisma.section.create({
@@ -115,6 +132,14 @@ describe("Manarah API (e2e)", () => {
       data: { examId: exam.id, studentId: student.id, monthly: 15, midterm: 25, finalExam: 40, total: 80, grade: "جيد جدًا" },
     });
     ids.result = result.id;
+    await prisma.examResult.create({
+      data: { examId: exam.id, studentId: classmate.id, monthly: 18, midterm: 28, finalExam: 45, total: 91, grade: "امتياز" },
+    });
+
+    // موظف في المؤسسة أ + قسط زميل — تُستخدم في اختبارات لاحقة
+    await prisma.feeRecord.create({
+      data: { tenantId: tenantA.id, studentId: classmate.id, plan: "قسط سنوي", total: 500000, dueDate: "2026-09-01" },
+    });
 
     // تطبيق Nest كامل بنفس guards + فلتر الأخطاء الإنتاجي
     const { AppModule } = await import("../src/app.module");
@@ -389,5 +414,170 @@ describe("Manarah API (e2e)", () => {
     expect(res.body).toHaveProperty("path");
     expect(res.body).toHaveProperty("timestamp");
     expect(res.body).toHaveProperty("statusCode", 400);
+  });
+
+  // ==========================================================================
+  // تدقيق RBAC شامل — اكتُشفت هذه الثغرات بجرد كل نقطة نهاية × كل دور، ثم
+  // التحقق الفعلي من ownership في طبقة الخدمة (لا الديكوريتر @Roles فقط)
+  // ==========================================================================
+
+  // 16 — C1: الطالب يرى سجله الخاص فقط، لا زميله في نفس الشعبة
+  it("C1 IDOR: الطالب يرى ملفه الخاص، ويُمنع من ملف زميله (403)", async () => {
+    const student = await login("student-a@test.io");
+    await request(app.getHttpServer())
+      .get(`/api/students/${ids.student}`)
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/api/students/${ids.classmate}`)
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(403);
+  });
+
+  // 17 — C2: نتائج الامتحان تُقيَّد بسجل الطالب فقط (كان يرى الشعبة كاملة)
+  it("C2 IDOR: كشف نتائج الامتحان يعرض للطالب سجله فقط لا كامل الشعبة", async () => {
+    const student = await login("student-a@test.io");
+    const res = await request(app.getHttpServer())
+      .get(`/api/exams/${ids.exam}/results`)
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(200);
+    expect(res.body.results).toHaveLength(1);
+    expect(res.body.results[0].studentId).toBe(ids.student);
+    // لكن الترتيب (rank) محسوب على الشعبة كاملة — الطالب حصل 80 والزميل 91، فرتبته 2
+    expect(res.body.results[0].rank).toBe(2);
+    expect(res.body.classSize).toBe(2);
+  });
+
+  // 18 — C3: كشف الدرجات PDF لطالب آخر غير موجود (404) لا تسريب
+  it("C3 IDOR: الطالب يُمنع من كشف درجات زميله عبر تخمين studentId (404)", async () => {
+    const student = await login("student-a@test.io");
+    await request(app.getHttpServer())
+      .get(`/api/exams/${ids.exam}/results/${ids.classmate}/card`)
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(404);
+    // لكن كشفه الخاص يعمل
+    await request(app.getHttpServer())
+      .get(`/api/exams/${ids.exam}/results/${ids.student}/card`)
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(200);
+  });
+
+  // 19 — C4: لوحة الطالب والمعلم لا تحوي أي حقل مالي أو إداري للمؤسسة
+  it("C4: لوحتا الطالب والمعلم بلا أي بيانات مالية/إدارية للمؤسسة", async () => {
+    const student = await login("student-a@test.io");
+    const studentDash = await request(app.getHttpServer())
+      .get("/api/dashboard")
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(200);
+    expect(studentDash.body.school).toBeUndefined();
+    expect(studentDash.body.platform).toBeUndefined();
+    expect(JSON.stringify(studentDash.body)).not.toMatch(/collected|outstanding|collectionRate|pendingAdmissions/);
+    expect(studentDash.body.student).toBeTruthy();
+
+    const teacher = await login("teacher-a@test.io");
+    const teacherDash = await request(app.getHttpServer())
+      .get("/api/dashboard")
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(200);
+    expect(teacherDash.body.school).toBeUndefined();
+    expect(JSON.stringify(teacherDash.body)).not.toMatch(/collected|outstanding|collectionRate|pendingAdmissions/);
+    expect(teacherDash.body.teacher).toBeTruthy();
+  });
+
+  // 20 — H1: رسالة INDIVIDUALS لا تقبل مستلمًا من مؤسسة أخرى
+  it("H1: إرسال رسالة لمستخدم من مؤسسة أخرى يُرفض (400)", async () => {
+    const admin = await login("admin-a@test.io");
+    await request(app.getHttpServer())
+      .post("/api/messages")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({
+        title: "رسالة اختبار",
+        body: "محتوى",
+        channel: "IN_APP",
+        audience: { kind: "INDIVIDUALS", userIds: [ids.adminB] },
+      })
+      .expect(400);
+  });
+
+  // 21 — H2: بحث المعلم لا يعيد سندات/مبالغ مالية إطلاقًا
+  it("H2: بحث المعلم لا يكشف سندات القبض", async () => {
+    const teacher = await login("teacher-a@test.io");
+    const res = await request(app.getHttpServer())
+      .get("/api/search?q=RC")
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(200);
+    expect(res.body.payments).toHaveLength(0);
+  });
+
+  // 22 — H3: المعلم يُمنع من تقرير حضور شعبة لا يملكها
+  it("H3: المعلم يُمنع من تقرير حضور شعبة لا يملكها (403)، ويسمح بشعبته", async () => {
+    const otherTeacher = await login("teacher2-a@test.io");
+    await request(app.getHttpServer())
+      .get(`/api/attendance/report?sectionId=${ids.section}`)
+      .set("Authorization", `Bearer ${otherTeacher.accessToken}`)
+      .expect(403);
+    const owner = await login("teacher-a@test.io");
+    await request(app.getHttpServer())
+      .get(`/api/attendance/report?sectionId=${ids.section}`)
+      .set("Authorization", `Bearer ${owner.accessToken}`)
+      .expect(200);
+  });
+
+  // 23 — M1: الطالب يصل لحضوره الخاص فقط عبر تقرير الحضور
+  it("M1: الطالب يرى حضوره الخاص فقط دون تحديد شعبة", async () => {
+    const student = await login("student-a@test.io");
+    const res = await request(app.getHttpServer())
+      .get("/api/attendance/report")
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(200);
+    for (const row of res.body) expect(row.student.id).toBe(ids.student);
+  });
+
+  // 24 — امتيازات مالية: الطالب يرى قسطه الخاص فقط لا قسط زميله
+  it("fees ownership: الطالب يرى أقساطه فقط لا أقساط زميله", async () => {
+    const student = await login("student-a@test.io");
+    const res = await request(app.getHttpServer())
+      .get("/api/fees")
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(200);
+    for (const item of res.body.items) expect(item.student.id).toBe(ids.student);
+  });
+
+  // 25 — تصعيد صلاحيات: جولة منهجية — الطالب يُمنع من كل نقاط النهاية الإدارية/المالية
+  it("privilege escalation sweep: الطالب يُمنع من كل المسارات الإدارية والمالية", async () => {
+    const student = await login("student-a@test.io");
+    const h = { Authorization: `Bearer ${student.accessToken}` };
+    const forbidden: [string, string][] = [
+      ["GET", "/api/tenants"],
+      ["GET", "/api/audit"],
+      ["GET", "/api/employees"],
+      ["POST", "/api/employees"],
+      ["GET", "/api/students"], // القائمة الإدارية — لا يحق للطالب تصفّح الطلبة
+      ["POST", "/api/students"],
+      ["DELETE", `/api/students/${ids.classmate}`],
+      ["POST", "/api/payments"],
+      ["POST", "/api/payments/x/void"],
+      ["POST", "/api/discounts"],
+      ["PUT", `/api/exams/${ids.exam}/results`],
+      ["POST", "/api/attendance/bulk"],
+      ["POST", "/api/ai/generate"],
+      ["PATCH", "/api/tenants/mine/settings"],
+      ["GET", "/api/routes"],
+    ];
+    for (const [method, url] of forbidden) {
+      const res = await request(app.getHttpServer())
+        [method.toLowerCase() as "get" | "post" | "put" | "patch" | "delete"](url)
+        .set(h)
+        .send({});
+      expect([401, 403]).toContain(res.status);
+    }
+  });
+
+  // 26 — تخمين معرّفات: مدير المؤسسة أ يُمنع من الوصول لأي كيان في المؤسسة ب
+  it("ID guessing across tenants: مدير المؤسسة أ يُمنع من كل بيانات المؤسسة ب", async () => {
+    const adminA = await login("admin-a@test.io");
+    const h = { Authorization: `Bearer ${adminA.accessToken}` };
+    await request(app.getHttpServer()).get(`/api/students/${ids.studentB}`).set(h).expect(404);
+    await request(app.getHttpServer()).get(`/api/tenants/${ids.tenantB}`).set(h).expect(403);
   });
 });

@@ -60,7 +60,15 @@ export class MessagesService {
       }
       case "INDIVIDUALS": {
         if (!a.userIds?.length) throw new BadRequestException("حدّد المستلمين");
-        return { userIds: a.userIds, label: `${a.userIds.length} مستلم` };
+        // H1 — التحقق أن كل مستلم ينتمي لنفس المؤسسة (رفض حقن معرّفات مستخدمين من مؤسسة أخرى)
+        const valid = await this.prisma.user.findMany({
+          where: { id: { in: a.userIds }, tenantId },
+          select: { id: true },
+        });
+        if (valid.length !== a.userIds.length) {
+          throw new BadRequestException("بعض المستلمين غير موجودين في مؤسستك");
+        }
+        return { userIds: valid.map((v) => v.id), label: `${valid.length} مستلم` };
       }
       case "ABSENTEES": {
         const today = new Date().toISOString().slice(0, 10);
