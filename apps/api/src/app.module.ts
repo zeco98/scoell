@@ -21,6 +21,7 @@ import { AiModule } from "./ai/ai.module";
 import { HrModule } from "./hr/hr.module";
 import { TransportModule } from "./transport/transport.module";
 import { UsersModule } from "./users/users.module";
+import { DocumentsModule } from "./documents/documents.module";
 
 @Module({
   imports: [
@@ -47,6 +48,7 @@ import { UsersModule } from "./users/users.module";
     HrModule,
     TransportModule,
     UsersModule,
+    DocumentsModule,
   ],
   providers: [
     // الترتيب مهم: مصادقة ← صلاحيات ← rate limiting

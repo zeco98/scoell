@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service";
 import { AuditService, type AuditContext } from "../audit/audit.service";
 import { tenantWhere, requireTenant, type AuthUser } from "../common/types";
 import { renderReportCardHtml } from "../pdf/templates";
+import { documentSerial, verificationCode } from "../documents/verify";
 
 function gradeOf(total: number): string {
   return total >= 90 ? "امتياز" : total >= 80 ? "جيد جدًا" : total >= 70 ? "جيد" : total >= 60 ? "متوسط" : total >= 50 ? "مقبول" : "راسب";
@@ -191,8 +192,16 @@ export class ExamsService {
       include: { section: true },
     });
     if (!student) throw new NotFoundException("الطالب غير موجود");
+    const serial = documentSerial("report_card", exam.tenantId, student.id, examId.slice(-8));
+    const verifyCode = verificationCode(serial, {
+      name: student.name,
+      code: student.code,
+      total: mine.total,
+      exam: exam.name,
+    });
     return renderReportCardHtml({
       tenantName: exam.tenant.name,
+      tenantCity: exam.tenant.city,
       examName: exam.name,
       year: exam.year,
       student: { name: student.name, code: student.code, section: student.section },
@@ -209,6 +218,8 @@ export class ExamsService {
         },
       ],
       average: mine.total,
+      serial,
+      verifyCode,
     });
   }
 }

@@ -580,4 +580,90 @@ describe("Manarah API (e2e)", () => {
     await request(app.getHttpServer()).get(`/api/students/${ids.studentB}`).set(h).expect(404);
     await request(app.getHttpServer()).get(`/api/tenants/${ids.tenantB}`).set(h).expect(403);
   });
+
+  // ==========================================================================
+  // الوثائق الرسمية — شهادات / بيان درجات / كشف حساب + بوابة تحقق
+  // ==========================================================================
+
+  // 27 — الشهادة تُصدَر بهوية منارة وتحمل رقمًا ورمز تحقق
+  it("documents: الشهادة تُصدَر HTML بهوية منارة + رقم تسلسلي ورمز تحقق", async () => {
+    const admin = await login("admin-a@test.io");
+    const res = await request(app.getHttpServer())
+      .get(`/api/documents/students/${ids.student}/certificate?kind=completion&year=2025-2026`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+    expect(res.text).toContain("Cairo");
+    expect(res.text).toContain("0b6e63");
+    expect(res.text).toMatch(/CRT-[A-Z0-9-]+/); // رقم تسلسلي
+    expect(res.text).toMatch(/[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}/); // رمز تحقق
+    expect(res.text).toContain("نسخة رسمية"); // علامة مائية
+  });
+
+  // 28 — بيان الدرجات وكشف الحساب يُصدَران للمدير
+  it("documents: بيان الدرجات وكشف الحساب يُصدَران بنجاح", async () => {
+    const admin = await login("admin-a@test.io");
+    await request(app.getHttpServer())
+      .get(`/api/documents/students/${ids.student}/transcript?year=2025-2026`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/api/documents/students/${ids.student}/statement`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+  });
+
+  // 29 — RBAC وثائق: الطالب يصدر وثيقته، ويُمنع من وثيقة زميله
+  it("documents RBAC: الطالب يصدر وثيقته فقط لا وثيقة زميله (403)", async () => {
+    const student = await login("student-a@test.io");
+    await request(app.getHttpServer())
+      .get(`/api/documents/students/${ids.student}/transcript`)
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/api/documents/students/${ids.classmate}/transcript`)
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(403);
+    // كشف الحساب المالي: طلب سجل زميل يُخفى وجوده (404) بدل الكشف عنه
+    await request(app.getHttpServer())
+      .get(`/api/documents/students/${ids.classmate}/statement`)
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .expect(404);
+  });
+
+  // 30 — RBAC وثائق: المعلم ممنوع من الشهادات وكشف الحساب، مسموح ببيان شعبته
+  it("documents RBAC: المعلم يُصدر بيان طلاب شعبه، ويُمنع من الشهادة وكشف الحساب", async () => {
+    const teacher = await login("teacher-a@test.io");
+    await request(app.getHttpServer())
+      .get(`/api/documents/students/${ids.student}/transcript`)
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/api/documents/students/${ids.student}/certificate`)
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(403);
+    await request(app.getHttpServer())
+      .get(`/api/documents/students/${ids.student}/statement`)
+      .set("Authorization", `Bearer ${teacher.accessToken}`)
+      .expect(403);
+  });
+
+  // 31 — بوابة التحقق العامة: تقبل الرمز الصحيح، ترفض المزوّر، بلا PII
+  it("verify portal: تحقق عام يقبل الرمز الصحيح ويرفض المزوّر دون كشف PII", async () => {
+    const admin = await login("admin-a@test.io");
+    const doc = await request(app.getHttpServer())
+      .get(`/api/documents/students/${ids.student}/certificate?kind=graduation&year=2025-2026`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+    const serial = doc.text.match(/CRT-[A-Z0-9-]+/)![0];
+    const code = doc.text.match(/[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}/)![0];
+
+    // بلا مصادقة (مسار عام)
+    const ok = await request(app.getHttpServer()).get(`/api/documents/verify/${serial}?code=${code}`).expect(200);
+    expect(ok.body.valid).toBe(true);
+    // لا اسم كامل ولا درجات في الملخص — أول حرف فقط
+    expect(JSON.stringify(ok.body)).not.toContain("طالب الاختبار الأول");
+
+    const bad = await request(app.getHttpServer()).get(`/api/documents/verify/${serial}?code=AAAA-BBBB-CCCC`).expect(200);
+    expect(bad.body.valid).toBe(false);
+  });
 });

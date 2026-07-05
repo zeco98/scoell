@@ -9,6 +9,7 @@ import {
   computeFeeStatus as feeStatus,
   type AuthUser,
 } from "../common/types";
+import { verificationCode } from "../documents/verify";
 
 const OWN_SCOPE_ROLES: AuthUser["role"][] = ["PARENT", "STUDENT"];
 
@@ -227,7 +228,13 @@ export class FeesService {
       },
     });
     if (!payment) throw new NotFoundException("السند غير موجود");
-    return payment;
+    // رمز تحقق للسند (يمنع تزوير المبلغ/الرقم) — مشتق من الحقول الثابتة
+    const verifyCode = verificationCode(payment.receiptNo, {
+      amount: payment.amount,
+      student: payment.student.code,
+      date: payment.createdAt.toISOString().slice(0, 10),
+    });
+    return { ...payment, verifyCode };
   }
 
   async createDiscount(

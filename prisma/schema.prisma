@@ -397,3 +397,19 @@ model FileAsset {
   @@index([studentId])
   @@index([tenantId])
 }
+
+// سجل إصدار الوثائق الرسمية — يمكّن بوابة تحقق مضادة للتزوير + أرشفة نسخ
+model DocumentIssue {
+  id         String   @id @default(cuid())
+  tenantId   String
+  studentId  String
+  kind       String // certificate | transcript | statement | report_card | receipt
+  serial     String   @unique
+  verifyCode String
+  summary    String   @default("{}") // JSON غير حسّاس للعرض العام (نوع/سنة/تاريخ/أول حرف)
+  issuedById String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([tenantId, studentId])
+}

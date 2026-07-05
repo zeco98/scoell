@@ -21,7 +21,16 @@ import {
   AlertDialogTitle,
 } from "../ui/alert-dialog";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "../ui/dialog";
-import { ArrowRight, Archive, ArrowLeftRight, FileText, Phone, Printer, Loader2, ClipboardList } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import type { Role } from "@manarah/shared";
+import { ArrowRight, Archive, ArrowLeftRight, FileText, Phone, Printer, Loader2, ClipboardList, Award, ScrollText, Wallet, ChevronDown } from "lucide-react";
 
 const MARK_LABELS: Record<string, string> = { present: "حاضر", absent: "غائب", late: "متأخر", early: "خروج مبكر" };
 
@@ -105,6 +114,15 @@ export function StudentProfile() {
   const isAdmin = user?.role === "SCHOOL_ADMIN";
   const latestResult = s.examResults[0];
 
+  // العام الدراسي للوثائق: من آخر نتيجة إن وُجدت، وإلا الافتراضي
+  const docYear = latestResult?.exam.year ?? "2025-2026";
+  const role = user?.role;
+  const can = (roles: Role[]) => !!role && roles.includes(role);
+  const canCert = can(["SUPER_ADMIN", "SCHOOL_ADMIN", "PARENT", "STUDENT", "AUDITOR"]);
+  const canTranscript = can(["SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER", "PARENT", "STUDENT", "AUDITOR"]);
+  const canStatement = can(["SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "PARENT", "STUDENT", "AUDITOR"]);
+  const openDoc = (url: string) => window.open(url, "_blank");
+
   return (
     <div>
       <Button variant="ghost" size="sm" className="gap-1 mb-3 -mr-2" onClick={() => navigate("/students")}>
@@ -121,10 +139,52 @@ export function StudentProfile() {
               <Button
                 variant="outline"
                 className="gap-2"
-                onClick={() => window.open(api.exams.reportCardUrl(latestResult.exam.id, s.id), "_blank")}
+                onClick={() => openDoc(api.exams.reportCardUrl(latestResult.exam.id, s.id))}
               >
                 <Printer size={16} /> كشف الدرجات
               </Button>
+            )}
+            {/* الوثائق الرسمية — القوالب مقيَّدة بالدور (الحكم النهائي في السيرفر) */}
+            {(canCert || canTranscript || canStatement) && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="gap-2">
+                    <FileText size={16} /> الوثائق الرسمية <ChevronDown size={14} />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start" className="w-56">
+                  {canCert && (
+                    <>
+                      <DropdownMenuLabel>الشهادات</DropdownMenuLabel>
+                      <DropdownMenuItem className="gap-2" onClick={() => openDoc(api.documents.certificateUrl(s.id, "completion", docYear))}>
+                        <Award size={15} /> شهادة إتمام
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2" onClick={() => openDoc(api.documents.certificateUrl(s.id, "graduation", docYear))}>
+                        <Award size={15} /> شهادة تخرّج
+                      </DropdownMenuItem>
+                      <DropdownMenuItem className="gap-2" onClick={() => openDoc(api.documents.certificateUrl(s.id, "enrollment", docYear))}>
+                        <ScrollText size={15} /> تأييد قيد دراسي
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {canTranscript && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="gap-2" onClick={() => openDoc(api.documents.transcriptUrl(s.id, docYear))}>
+                        <ClipboardList size={15} /> بيان الدرجات (Transcript)
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                  {canStatement && (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem className="gap-2" onClick={() => openDoc(api.documents.statementUrl(s.id))}>
+                        <Wallet size={15} /> كشف الحساب المالي
+                      </DropdownMenuItem>
+                    </>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
             )}
             {isAdmin && (
               <>

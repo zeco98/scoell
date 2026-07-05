@@ -358,6 +358,20 @@ export class ManarahClient {
         `/users${this.qs({ role })}`,
       ),
   };
+
+  // ------------------------------------------------------ الوثائق الرسمية (روابط طباعة)
+  documents = {
+    certificateUrl: (studentId: string, kind: "completion" | "graduation" | "enrollment", year: string) =>
+      this.absoluteUrl(`/documents/students/${studentId}/certificate${this.qs({ kind, year })}`),
+    transcriptUrl: (studentId: string, year: string) =>
+      this.absoluteUrl(`/documents/students/${studentId}/transcript${this.qs({ year })}`),
+    statementUrl: (studentId: string) => this.absoluteUrl(`/documents/students/${studentId}/statement`),
+    verify: (serial: string, code: string) =>
+      this.request<{ valid: boolean; reason?: string; kind?: string; serial?: string; issuedAt?: string; summary?: Record<string, unknown> }>(
+        "GET",
+        `/documents/verify/${encodeURIComponent(serial)}${this.qs({ code })}`,
+      ),
+  };
 }
 
 // ----------------------------------------------------------------- الأنواع
