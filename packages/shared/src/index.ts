@@ -6,6 +6,97 @@
 
 import { z } from "zod";
 
+// ============================================================================
+// نظام درجات وزارة التربية العراقية — مصدر واحد للحقيقة.
+// كان منطق التقديرات مكرَّرًا في ثلاثة مواضع بأرقام سحرية؛ هذا يوحّده ويضيف ما
+// يتطلبه السجل المدرسي الرسمي: المعدل العام، التقدير، والنتيجة (ناجح/مكمّل/راسب).
+// القاعدة: الدرجة من 100، النجاح 50. الراسب في مادة يكون «مكمّلًا» وله دور ثانٍ؛
+// فإن رسب في الدور الثاني (أو تجاوز سقف الإكمال) صار «راسبًا».
+// ============================================================================
+
+/** درجة النجاح في المادة الواحدة */
+export const PASS_MARK = 50;
+/** الدرجة العظمى للمادة */
+export const MAX_SUBJECT_MARK = 100;
+
+/** التقديرات الرسمية مرتّبة من الأعلى، كل حد أدنى شامل */
+export const GRADE_BANDS = [
+  { min: 90, label: "امتياز" },
+  { min: 80, label: "جيد جدًا" },
+  { min: 70, label: "جيد" },
+  { min: 60, label: "متوسط" },
+  { min: 50, label: "مقبول" },
+  { min: 0, label: "راسب" },
+] as const;
+
+export type GradeLabel = (typeof GRADE_BANDS)[number]["label"];
+
+/** التقدير الرسمي لدرجة (0..100) — مصدر واحد يستبدل كل نسخة inline */
+export function gradeFor(score: number): GradeLabel {
+  for (const band of GRADE_BANDS) {
+    if (score >= band.min) return band.label;
+  }
+  return "راسب";
+}
+
+/** هل نجح الطالب في المادة (>= درجة النجاح) */
+export function isPass(score: number): boolean {
+  return score >= PASS_MARK;
+}
+
+/** المعدل العام = مجموع الدرجات ÷ عدد المواد (يُرجِع null إن لا مواد) */
+export function generalAverage(scores: number[]): number | null {
+  if (scores.length === 0) return null;
+  return scores.reduce((a, s) => a + s, 0) / scores.length;
+}
+
+/** الدور: الأول (الامتحان النهائي) أو الثاني (امتحان الإكمال) */
+export type ExamRound = "first" | "second";
+
+/** النتيجة النهائية للطالب حسب لائحة وزارة التربية */
+export type FinalStatus = "ناجح" | "مكمّل" | "راسب" | "غير محدد";
+
+export interface FinalResult {
+  status: FinalStatus;
+  /** عدد المواد الراسب فيها */
+  failedCount: number;
+  average: number | null;
+  averageGrade: GradeLabel | null;
+}
+
+export interface FinalResultOptions {
+  /** الدور الحالي — الثاني يحسم الرسوب النهائي (افتراضي: الأول) */
+  round?: ExamRound;
+  /** أقصى عدد مواد يُسمح بإكمالها؛ تجاوزه = راسب مباشرة (اختياري) */
+  maxSupplementary?: number;
+}
+
+/**
+ * يحسب النتيجة النهائية من درجات مواد الطالب:
+ * - كل المواد ناجحة → «ناجح»
+ * - رسوب في مادة أو أكثر: تجاوز سقف الإكمال → «راسب»؛ الدور الثاني → «راسب»؛
+ *   غير ذلك → «مكمّل» (له دور ثانٍ).
+ */
+export function finalResult(scores: number[], opts: FinalResultOptions = {}): FinalResult {
+  const average = generalAverage(scores);
+  const averageGrade = average == null ? null : gradeFor(average);
+  if (scores.length === 0) {
+    return { status: "غير محدد", failedCount: 0, average, averageGrade };
+  }
+  const failedCount = scores.filter((s) => s < PASS_MARK).length;
+  let status: FinalStatus;
+  if (failedCount === 0) {
+    status = "ناجح";
+  } else if (opts.maxSupplementary != null && failedCount > opts.maxSupplementary) {
+    status = "راسب";
+  } else if (opts.round === "second") {
+    status = "راسب";
+  } else {
+    status = "مكمّل";
+  }
+  return { status, failedCount, average, averageGrade };
+}
+
 // ---------------------------------------------------------------------------
 // الأدوار — التسعة كاملة (المواصفة القسم 1)
 // ---------------------------------------------------------------------------

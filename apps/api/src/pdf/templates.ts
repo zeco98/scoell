@@ -289,7 +289,9 @@ export interface TranscriptModel {
   year: string;
   rows: { exam: string; subject: string; total: number; grade: string; date?: string | Date | null }[];
   cumulativeAverage: number;
-  resultLabel: string; // ناجح/راسب/مكمل
+  averageGrade?: string | null; // التقدير الرسمي للمعدل (امتياز/جيد جدًا…)
+  resultLabel: string; // النتيجة النهائية: ناجح/مكمّل/راسب
+  failedCount?: number; // عدد المواد الراسب فيها (للإكمال)
   serial?: string;
   verifyCode?: string;
   principalName?: string;
@@ -335,7 +337,12 @@ export function renderTranscriptHtml(m: TranscriptModel): string {
       </tr></thead>
       <tbody>${rowsHtml}</tbody>
     </table>
-    <div class="total"><span>المعدل التراكمي · النتيجة: ${esc(m.resultLabel)}</span><span>${m.cumulativeAverage.toFixed(1)} / 100</span></div>
+    <div class="total">
+      <span>النتيجة النهائية: <strong>${esc(m.resultLabel)}</strong>${
+        m.resultLabel === "مكمّل" && m.failedCount ? esc(` (${m.failedCount} مادة — له دور ثانٍ)`) : ""
+      }</span>
+      <span>المعدل العام: ${m.cumulativeAverage.toFixed(1)} / 100${m.averageGrade ? esc(` — ${m.averageGrade}`) : ""}</span>
+    </div>
     <div class="stamp">
       <div class="line">${esc(m.principalName ?? "مدير المدرسة")}</div>
       <div class="line">مسؤول شؤون الطلبة</div>

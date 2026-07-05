@@ -1,14 +1,10 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import type { UpsertExamResultDto } from "@manarah/shared";
+import { gradeFor, type UpsertExamResultDto } from "@manarah/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService, type AuditContext } from "../audit/audit.service";
 import { tenantWhere, requireTenant, type AuthUser } from "../common/types";
 import { renderReportCardHtml } from "../pdf/templates";
 import { documentSerial, verificationCode } from "../documents/verify";
-
-function gradeOf(total: number): string {
-  return total >= 90 ? "امتياز" : total >= 80 ? "جيد جدًا" : total >= 70 ? "جيد" : total >= 60 ? "متوسط" : total >= 50 ? "مقبول" : "راسب";
-}
 
 @Injectable()
 export class ExamsService {
@@ -139,7 +135,7 @@ export class ExamsService {
     let updated = 0;
     for (const row of rows) {
       const total = row.monthly + row.midterm + row.finalExam;
-      const grade = gradeOf(total);
+      const grade = gradeFor(total);
       const prev = existingMap.get(row.studentId);
       if (prev) {
         if (prev.monthly === row.monthly && prev.midterm === row.midterm && prev.finalExam === row.finalExam) continue;

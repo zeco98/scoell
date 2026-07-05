@@ -3,7 +3,8 @@ module.exports = {
   preset: "ts-jest",
   testEnvironment: "node",
   roots: ["<rootDir>/test"],
-  testRegex: "\\.e2e-spec\\.ts$",
+  // e2e (قاعدة معزولة) + وحدات منطق نقية (grading.spec.ts) في نفس البوابة
+  testRegex: "\\.(e2e-spec|spec)\\.ts$",
   testTimeout: 30000,
   maxWorkers: 1, // قاعدة اختبار واحدة — تسلسل إلزامي
 };

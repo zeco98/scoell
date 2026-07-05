@@ -707,10 +707,16 @@ describe("Manarah API (e2e)", () => {
   // 28 — بيان الدرجات وكشف الحساب يُصدَران للمدير
   it("documents: بيان الدرجات وكشف الحساب يُصدَران بنجاح", async () => {
     const admin = await login("admin-a@test.io");
-    await request(app.getHttpServer())
+    const transcript = await request(app.getHttpServer())
       .get(`/api/documents/students/${ids.student}/transcript?year=2025-2026`)
       .set("Authorization", `Bearer ${admin.accessToken}`)
       .expect(200);
+    // توافق وزارة التربية: النتيجة النهائية + المعدل العام + التقدير الرسمي.
+    // اختبار «grade+audit» السابق رفع نتيجة الطالب إلى 90 → ناجح، تقدير «امتياز».
+    expect(transcript.text).toContain("النتيجة النهائية");
+    expect(transcript.text).toContain("ناجح");
+    expect(transcript.text).toContain("المعدل العام");
+    expect(transcript.text).toContain("امتياز");
     await request(app.getHttpServer())
       .get(`/api/documents/students/${ids.student}/statement`)
       .set("Authorization", `Bearer ${admin.accessToken}`)

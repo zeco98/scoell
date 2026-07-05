@@ -1,4 +1,5 @@
 import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { finalResult, gradeFor, generalAverage } from "@manarah/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { tenantWhere, ownStudentWhere, type AuthUser } from "../common/types";
 import {
@@ -107,9 +108,8 @@ export class DocumentsService {
       where: { studentId: student.id, exam: { year } },
       select: { total: true },
     });
-    const average = results.length ? results.reduce((a, r) => a + r.total, 0) / results.length : null;
-    const grade =
-      average == null ? null : average >= 90 ? "امتياز" : average >= 80 ? "جيد جدًا" : average >= 70 ? "جيد" : average >= 60 ? "متوسط" : average >= 50 ? "مقبول" : "راسب";
+    const average = generalAverage(results.map((r) => r.total));
+    const grade = average == null ? null : gradeFor(average);
 
     const serial = documentSerial("certificate", student.tenantId, student.id, `${kind}${year}`);
     const verify = verificationCode(serial, {
@@ -155,12 +155,11 @@ export class DocumentsService {
       grade: r.grade,
       date: r.exam.createdAt,
     }));
-    const cumulativeAverage = rows.length ? rows.reduce((a, r) => a + r.total, 0) / rows.length : 0;
-    const resultLabel = !rows.length
-      ? "غير محدد"
-      : rows.some((r) => r.total < 50)
-        ? "مكمل"
-        : "ناجح";
+    // النتيجة الرسمية وفق لائحة وزارة التربية: معدل عام + تقدير + ناجح/مكمّل/راسب
+    const outcome = finalResult(rows.map((r) => r.total));
+    const cumulativeAverage = outcome.average ?? 0;
+    const resultLabel = outcome.status;
+    const averageGrade = outcome.averageGrade;
 
     const serial = documentSerial("transcript", student.tenantId, student.id, year);
     const verify = verificationCode(serial, {
@@ -178,7 +177,9 @@ export class DocumentsService {
       year,
       rows,
       cumulativeAverage,
+      averageGrade,
       resultLabel,
+      failedCount: outcome.failedCount,
       serial,
       verifyCode: verify,
     });
