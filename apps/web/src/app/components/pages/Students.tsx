@@ -163,21 +163,39 @@ function CreateStudentDialog({ open, onClose }: { open: boolean; onClose: () => 
 function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
   const [report, setReport] = useState<CsvImportReport | null>(null);
 
-  const importCsv = useMutation({
-    mutationFn: (file: File) => api.students.importCsv(file),
+  const reset = () => { setReport(null); setFile(null); };
+
+  // المعاينة: تحقّق بلا حفظ — يراجعه الموظف ثم يؤكد
+  const preview = useMutation({
+    mutationFn: (f: File) => api.students.importCsv(f, { dryRun: true }),
+    onSuccess: (r) => {
+      setReport(r);
+      if (r.duplicates) toast.info(`${r.duplicates} صف موجود مسبقًا سيُتخطى`);
+      if (r.rejected > 0) toast.warning(`${r.rejected} صف به خطأ — صحّح الملف قبل التأكيد`);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "فشلت المعاينة"),
+  });
+
+  // التأكيد: الاستيراد الفعلي
+  const commit = useMutation({
+    mutationFn: (f: File) => api.students.importCsv(f, { dryRun: false }),
     onSuccess: (r) => {
       setReport(r);
       qc.invalidateQueries({ queryKey: ["students"] });
       if (r.created > 0) toast.success(`استُورد ${r.created} طالبًا من ${r.total} صف`);
-      if (r.rejected > 0) toast.warning(`${r.rejected} صف مرفوض — راجع تقرير الأخطاء`);
+      if (r.duplicates) toast.info(`${r.duplicates} صف مكرر تم تخطيه`);
     },
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل الاستيراد"),
   });
 
+  const busy = preview.isPending || commit.isPending;
+  const committed = !!report && !report.dryRun;
+
   return (
-    <Dialog open={open} onOpenChange={(o) => { if (!o) { setReport(null); onClose(); } }}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) { reset(); onClose(); } }}>
       <DialogContent className="sm:max-w-lg" dir="rtl">
         <DialogHeader className="text-right">
           <DialogTitle>استيراد طلبة من CSV</DialogTitle>
@@ -188,38 +206,66 @@ function ImportCsvDialog({ open, onClose }: { open: boolean; onClose: () => void
 
         {!report ? (
           <div className="space-y-3">
-            <input ref={fileRef} type="file" accept=".csv" className="w-full rounded-lg border border-dashed border-border p-6 text-muted-foreground" />
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".csv"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              className="w-full rounded-lg border border-dashed border-border p-6 text-muted-foreground"
+            />
             <Button
               className="w-full gap-2"
-              disabled={importCsv.isPending}
+              disabled={busy || !file}
               onClick={() => {
-                const f = fileRef.current?.files?.[0];
+                const f = file ?? fileRef.current?.files?.[0] ?? null;
                 if (!f) return toast.error("اختر ملف CSV أولًا");
-                importCsv.mutate(f);
+                setFile(f);
+                preview.mutate(f);
               }}
             >
-              {importCsv.isPending ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
-              {importCsv.isPending ? "جارٍ الاستيراد..." : "استيراد"}
+              {preview.isPending ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+              {preview.isPending ? "جارٍ الفحص..." : "معاينة قبل الاستيراد"}
             </Button>
           </div>
         ) : (
           <div className="space-y-3">
-            <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="grid grid-cols-4 gap-2 text-center">
               <div className="rounded-lg bg-muted/60 p-3"><div style={{ fontWeight: 700 }}>{report.total}</div><div className="text-muted-foreground">صفوف</div></div>
-              <div className="rounded-lg bg-success/10 p-3 text-success"><div style={{ fontWeight: 700 }}>{report.created}</div><div>نجحت</div></div>
-              <div className="rounded-lg bg-destructive/10 p-3 text-destructive"><div style={{ fontWeight: 700 }}>{report.rejected}</div><div>رُفضت</div></div>
+              <div className="rounded-lg bg-success/10 p-3 text-success"><div style={{ fontWeight: 700 }}>{committed ? report.created : (report.wouldCreate ?? 0)}</div><div>{committed ? "نجحت" : "ستُنشأ"}</div></div>
+              <div className="rounded-lg bg-warning/10 p-3 text-warning"><div style={{ fontWeight: 700 }}>{report.duplicates ?? 0}</div><div>مكرر</div></div>
+              <div className="rounded-lg bg-destructive/10 p-3 text-destructive"><div style={{ fontWeight: 700 }}>{report.rejected}</div><div>أخطاء</div></div>
             </div>
-            <div className="max-h-56 overflow-y-auto divide-y divide-border rounded-lg border border-border">
+            <div className="max-h-52 overflow-y-auto divide-y divide-border rounded-lg border border-border">
               {report.report.map((r) => (
                 <div key={r.row} className="flex items-center gap-2 p-2.5">
-                  {r.ok ? <CheckCircle2 size={16} className="text-success shrink-0" /> : <FileWarning size={16} className="text-destructive shrink-0" />}
+                  {r.ok ? (
+                    <CheckCircle2 size={16} className="text-success shrink-0" />
+                  ) : r.duplicate ? (
+                    <FileWarning size={16} className="text-warning shrink-0" />
+                  ) : (
+                    <FileWarning size={16} className="text-destructive shrink-0" />
+                  )}
                   <span className="text-muted-foreground">صف {r.row}</span>
                   <span className="text-foreground truncate">{r.name ?? "—"}</span>
-                  {r.error && <span className="text-destructive mr-auto">{r.error}</span>}
+                  {r.error && <span className={`mr-auto ${r.duplicate ? "text-warning" : "text-destructive"}`}>{r.error}</span>}
                 </div>
               ))}
             </div>
-            <Button variant="outline" className="w-full" onClick={() => { setReport(null); onClose(); }}>إغلاق</Button>
+            {committed ? (
+              <Button variant="outline" className="w-full" onClick={() => { reset(); onClose(); }}>إغلاق</Button>
+            ) : (
+              <div className="flex gap-2">
+                <Button variant="outline" className="flex-1" onClick={reset} disabled={busy}>ملف آخر</Button>
+                <Button
+                  className="flex-1 gap-2"
+                  disabled={busy || !file || (report.wouldCreate ?? 0) === 0}
+                  onClick={() => file && commit.mutate(file)}
+                >
+                  {commit.isPending ? <Loader2 size={16} className="animate-spin" /> : <Upload size={16} />}
+                  تأكيد الاستيراد ({report.wouldCreate ?? 0})
+                </Button>
+              </div>
+            )}
           </div>
         )}
       </DialogContent>

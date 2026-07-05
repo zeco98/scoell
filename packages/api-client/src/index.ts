@@ -178,10 +178,11 @@ export class ManarahClient {
     moveSection: (id: string, sectionId: string) =>
       this.request<StudentListItem>("PATCH", `/students/${id}/section`, { sectionId }),
     archive: (id: string) => this.request<{ ok: boolean }>("DELETE", `/students/${id}`),
-    importCsv: (file: File | Blob) => {
+    importCsv: (file: File | Blob, opts: { dryRun?: boolean } = {}) => {
       const form = new FormData();
       form.append("file", file);
-      return this.request<CsvImportReport>("POST", "/students/import", form, true);
+      const q = opts.dryRun ? "?dryRun=true" : "";
+      return this.request<CsvImportReport>("POST", `/students/import${q}`, form, true);
     },
     uploadDocument: (id: string, file: File | Blob) => {
       const form = new FormData();
@@ -411,10 +412,13 @@ export interface StudentDetail extends StudentListItem {
 }
 
 export interface CsvImportReport {
+  dryRun?: boolean;
   total: number;
   created: number;
+  wouldCreate?: number; // في المعاينة: عدد ما سيُنشأ عند التأكيد
+  duplicates?: number; // صفوف موجودة مسبقًا/مكررة تُتخطى
   rejected: number;
-  report: { row: number; name?: string; ok: boolean; error?: string }[];
+  report: { row: number; name?: string; ok: boolean; error?: string; duplicate?: boolean }[];
 }
 
 export interface FeeRecordItem {

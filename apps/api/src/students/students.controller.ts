@@ -111,8 +111,12 @@ export class StudentsController {
     @UploadedFile() file: Express.Multer.File,
     @CurrentUser() user: AuthUser,
     @Req() req: Request,
+    @Query("dryRun") dryRun?: string,
   ) {
-    return this.students.importCsv(user, file.buffer, ctx(req));
+    // dryRun=true → معاينة فقط (تحقّق بلا حفظ) ليراجعها الموظف قبل التأكيد
+    return this.students.importCsv(user, file.buffer, ctx(req), {
+      dryRun: dryRun === "true" || dryRun === "1",
+    });
   }
 
   /** رفع وثيقة لطالب (هوية، بطاقة سكن...) — تخزين محلي S3-ready */

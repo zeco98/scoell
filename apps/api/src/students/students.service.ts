@@ -310,34 +310,75 @@ export class StudentsService {
   }
 
   /** استيراد CSV: name,gender,stage,section,guardianName,guardianPhone — تقرير خطأ لكل صف مرفوض */
-  async importCsv(user: AuthUser, buffer: Buffer, ctx: AuditContext) {
+  /**
+   * استيراد طلبة من CSV (تصدير إكسل القياسي) مع:
+   * - وضع المعاينة (dryRun): يتحقق من كل صف دون أي حفظ — يراجعه الموظف قبل التأكيد.
+   * - كشف التكرار: يتخطّى الطالب الموجود مسبقًا (نفس الاسم + هاتف ولي الأمر) وكذلك
+   *   التكرار داخل الملف نفسه — فيبقى إعادة الاستيراد آمنة بلا نسخ مكررة.
+   */
+  async importCsv(user: AuthUser, buffer: Buffer, ctx: AuditContext, opts: { dryRun?: boolean } = {}) {
     const tenantId = requireTenant(user);
+    const dryRun = opts.dryRun === true;
     let rows: Record<string, string>[];
     try {
       rows = parse(buffer, { columns: true, skip_empty_lines: true, trim: true, bom: true });
     } catch {
       throw new BadRequestException("ملف CSV غير صالح — تأكد من الترويسة والفواصل");
     }
-    const report: { row: number; name?: string; ok: boolean; error?: string }[] = [];
+
+    // مفتاح التكرار: الاسم المُطبَّع + هاتف ولي الأمر. نجمع الموجود مسبقًا مرة واحدة.
+    const norm = (s: string) => s.replace(/\s+/g, " ").trim().toLowerCase();
+    const dupKey = (name: string, phone: string) => `${norm(name)}|${(phone || "").trim()}`;
+    const existing = await this.prisma.student.findMany({
+      where: { tenantId },
+      select: { name: true, guardianPhone: true },
+    });
+    const seen = new Set(existing.map((e) => dupKey(e.name, e.guardianPhone ?? "")));
+
+    type Row = { row: number; name?: string; ok: boolean; error?: string; duplicate?: boolean };
+    const report: Row[] = [];
     let created = 0;
+    let wouldCreate = 0;
+    let duplicates = 0;
+    let invalid = 0;
+
     for (let i = 0; i < rows.length; i++) {
       const r = rows[i];
       const rowNo = i + 2; // بعد صف الترويسة
       const gender = r.gender === "أنثى" || r.gender?.toUpperCase() === "FEMALE" ? "FEMALE" : r.gender === "ذكر" || r.gender?.toUpperCase() === "MALE" ? "MALE" : null;
       if (!r.name || r.name.trim().length < 3) {
         report.push({ row: rowNo, name: r.name, ok: false, error: "الاسم ناقص" });
+        invalid++;
         continue;
       }
       if (!gender) {
         report.push({ row: rowNo, name: r.name, ok: false, error: "الجنس يجب أن يكون ذكر/أنثى" });
+        invalid++;
         continue;
       }
       if (!/^07\d{9}$/.test(r.guardianPhone ?? "")) {
         report.push({ row: rowNo, name: r.name, ok: false, error: "هاتف ولي الأمر غير صالح" });
+        invalid++;
         continue;
       }
       if (!r.stage || !r.section) {
         report.push({ row: rowNo, name: r.name, ok: false, error: "المرحلة/الشعبة ناقصة" });
+        invalid++;
+        continue;
+      }
+
+      // تكرار (موجود مسبقًا أو مكرر داخل الملف) → تخطٍّ آمن
+      const key = dupKey(r.name, r.guardianPhone);
+      if (seen.has(key)) {
+        report.push({ row: rowNo, name: r.name, ok: false, duplicate: true, error: "موجود مسبقًا — تم التخطي" });
+        duplicates++;
+        continue;
+      }
+      seen.add(key); // يمنع تكرار نفس الطالب مرتين داخل الملف
+
+      if (dryRun) {
+        wouldCreate++;
+        report.push({ row: rowNo, name: r.name, ok: true });
         continue;
       }
       try {
@@ -357,17 +398,30 @@ export class StudentsService {
         report.push({ row: rowNo, name: r.name, ok: true });
       } catch (e) {
         report.push({ row: rowNo, name: r.name, ok: false, error: "فشل الحفظ" });
+        invalid++;
       }
     }
-    await this.audit.log({
-      user,
-      tenantId,
-      action: `استيراد CSV: ${created} طالب من ${rows.length} صف`,
-      entity: "Student",
-      entityId: "csv-import",
-      after: { created, rejected: rows.length - created },
-      ctx,
-    });
-    return { total: rows.length, created, rejected: rows.length - created, report };
+
+    // المعاينة لا تُسجَّل في التدقيق (لا تغيير فعلي)؛ الاستيراد الفعلي يُسجَّل
+    if (!dryRun) {
+      await this.audit.log({
+        user,
+        tenantId,
+        action: `استيراد CSV: ${created} طالب من ${rows.length} صف (${duplicates} مكرر، ${invalid} مرفوض)`,
+        entity: "Student",
+        entityId: "csv-import",
+        after: { created, duplicates, rejected: invalid },
+        ctx,
+      });
+    }
+    return {
+      dryRun,
+      total: rows.length,
+      created,
+      wouldCreate,
+      duplicates,
+      rejected: invalid,
+      report,
+    };
   }
 }

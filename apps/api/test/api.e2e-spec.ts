@@ -223,6 +223,56 @@ describe("Manarah API (e2e)", () => {
     expect(audit).toBeTruthy();
   });
 
+  // 4ب — استيراد CSV: معاينة (بلا حفظ) + كشف التكرار + استيراد فعلي
+  it("import CSV: المعاينة تتحقق بلا حفظ وتكشف المكرر، والتأكيد يحفظ الجديد فقط", async () => {
+    const admin = await login("admin-a@test.io");
+    // صف جديد صالح · صف موجود مسبقًا (يطابق الطالب المزروع) · تكرار داخل الملف · صف خاطئ
+    const csv = [
+      "name,gender,stage,section,guardianName,guardianPhone",
+      "طالب مستورد جديد,ذكر,الرابع علمي,أ,ولي مستورد,07705554443",
+      "طالب الاختبار الأول,ذكر,الرابع علمي,أ,ولي,07701234567",
+      "طالب مستورد جديد,ذكر,الرابع علمي,أ,ولي مستورد,07705554443",
+      "طالب خطأ,ذكر,الرابع علمي,أ,ولي,123",
+    ].join("\n");
+
+    const before = await prisma.student.count({ where: { tenantId: ids.tenantA } });
+
+    // معاينة — لا تحفظ شيئًا
+    const dry = await request(app.getHttpServer())
+      .post("/api/students/import?dryRun=true")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .attach("file", Buffer.from(csv, "utf-8"), "students.csv")
+      .expect(201);
+    expect(dry.body.dryRun).toBe(true);
+    expect(dry.body.total).toBe(4);
+    expect(dry.body.wouldCreate).toBe(1);
+    expect(dry.body.duplicates).toBe(2); // الموجود مسبقًا + المكرر داخل الملف
+    expect(dry.body.rejected).toBe(1); // الهاتف الخاطئ
+    expect(dry.body.created).toBe(0);
+    const afterDry = await prisma.student.count({ where: { tenantId: ids.tenantA } });
+    expect(afterDry).toBe(before); // المعاينة لم تحفظ
+
+    // تأكيد الاستيراد — يحفظ الجديد فقط
+    const real = await request(app.getHttpServer())
+      .post("/api/students/import")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .attach("file", Buffer.from(csv, "utf-8"), "students.csv")
+      .expect(201);
+    expect(real.body.created).toBe(1);
+    expect(real.body.duplicates).toBe(2);
+    const afterReal = await prisma.student.count({ where: { tenantId: ids.tenantA } });
+    expect(afterReal).toBe(before + 1);
+
+    // إعادة استيراد نفس الملف — كله مكرر الآن، لا حفظ جديد
+    const again = await request(app.getHttpServer())
+      .post("/api/students/import")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .attach("file", Buffer.from(csv, "utf-8"), "students.csv")
+      .expect(201);
+    expect(again.body.created).toBe(0);
+    expect(again.body.duplicates).toBe(3); // الجديد صار موجودًا مسبقًا
+  });
+
   // 5 — الدفعات: ترقيم تسلسلي بلا فراغات
   it("payment: سندان متتاليان يحملان تسلسلًا متصاعدًا بلا فجوة ولا تكرار", async () => {
     const acc = await login("acc-a@test.io");
