@@ -9,20 +9,56 @@ export interface NotifyInput {
 }
 
 /**
- * مزوّد قنوات خارجي — abstraction جاهز للربط (SMS/WhatsApp/Push).
- * التنفيذ الحالي يسجّل فقط؛ الربط الفعلي (Twilio/FCM/...) يستبدل هذه الفئة
- * دون تغيير أي مستهلك.
+ * مزوّد قناة خارجية واحدة — abstraction جاهز للربط. لكل قناة مزوّدها:
+ * WhatsApp (الأهم للعراق) عبر WhatsApp Business API (قوالب معتمدة)، SMS عبر
+ * مزوّد محلي. التنفيذ الحالي محاكاة تسجّل حمولة منظّمة؛ الربط الفعلي يستبدل
+ * الفئة دون تغيير أي مستهلك.
  */
 export interface ChannelProvider {
-  send(channel: string, to: string, title: string, body: string): Promise<{ ok: boolean }>;
+  readonly channel: string;
+  send(to: string, title: string, body: string): Promise<{ ok: boolean; ref?: string }>;
 }
 
+/**
+ * واتساب — القناة الأولى للعراق. البنية جاهزة لـ WhatsApp Business Cloud API:
+ * POST https://graph.facebook.com/v20.0/{phoneNumberId}/messages برسالة نصية أو
+ * قالب معتمد (utility templates لتأكيد الدفع/إشعار الغياب). يتطلب رقمًا معتمدًا +
+ * WABA_TOKEN + PHONE_NUMBER_ID في البيئة.
+ */
 @Injectable()
-export class StubChannelProvider implements ChannelProvider {
-  private readonly logger = new Logger("ChannelProvider");
+export class WhatsAppProvider implements ChannelProvider {
+  readonly channel = "WHATSAPP";
+  private readonly logger = new Logger("WhatsApp");
+  async send(to: string, title: string, body: string) {
+    // بيئة محاكاة — الحمولة بشكل WA Business API الحقيقي (jsonب messaging_product)
+    this.logger.log(`[WA] → ${to} :: ${title} — ${body.slice(0, 80)}`);
+    // للربط الفعلي: fetch(`https://graph.facebook.com/v20.0/${PHONE_ID}/messages`,{...})
+    return { ok: true, ref: `wa_${Date.now()}` };
+  }
+}
+
+/** SMS عبر مزوّد محلي — احتياطي حين لا يملك ولي الأمر واتساب */
+@Injectable()
+export class SmsProvider implements ChannelProvider {
+  readonly channel = "SMS";
+  private readonly logger = new Logger("SMS");
+  async send(to: string, title: string, body: string) {
+    this.logger.log(`[SMS] → ${to} :: ${body.slice(0, 80)}`);
+    return { ok: true, ref: `sms_${Date.now()}` };
+  }
+}
+
+/** موزّع القنوات — يختار المزوّد الصحيح حسب القناة (WHATSAPP/SMS/IN_APP) */
+@Injectable()
+export class ChannelRouter {
+  private readonly map: Record<string, ChannelProvider>;
+  constructor(wa: WhatsAppProvider, sms: SmsProvider) {
+    this.map = { WHATSAPP: wa, SMS: sms };
+  }
   async send(channel: string, to: string, title: string, body: string) {
-    this.logger.log(`[${channel}] → ${to}: ${title} — ${body.slice(0, 60)}`);
-    return { ok: true };
+    const provider = this.map[channel];
+    if (!provider) return { ok: false }; // IN_APP لا يمر من هنا
+    return provider.send(to, title, body);
   }
 }
 
@@ -30,7 +66,7 @@ export class StubChannelProvider implements ChannelProvider {
 export class NotificationsService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly provider: StubChannelProvider,
+    private readonly router: ChannelRouter,
   ) {}
 
   /** إشعار in-app حقيقي — جدول + عدّاد غير مقروء */
@@ -53,7 +89,7 @@ export class NotificationsService {
   }
 
   async sendExternal(channel: string, to: string, title: string, body: string) {
-    return this.provider.send(channel, to, title, body);
+    return this.router.send(channel, to, title, body);
   }
 
   async listMine(user: AuthUser, unreadOnly = false) {

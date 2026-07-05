@@ -9,6 +9,7 @@
 import type {
   CreateStudentDto,
   CreatePaymentDto,
+  CreateCheckoutDto,
   CreateAdmissionDto,
   BulkAttendanceDto,
   CreateMessageDto,
@@ -223,6 +224,15 @@ export class ManarahClient {
       ),
     createPayment: (dto: CreatePaymentDto) =>
       this.request<PaymentItem & { fullyPaid: boolean }>("POST", "/payments", dto),
+    /** بدء دفع إلكتروني — يعيد رابط بوابة الدفع (زين كاش…) لتحويل المستخدم إليه */
+    checkout: (dto: CreateCheckoutDto) =>
+      this.request<{
+        intentId: string;
+        providerRef: string;
+        checkoutUrl: string;
+        amount: number;
+        gateway: string;
+      }>("POST", "/payments/checkout", dto),
     voidPayment: (id: string, reason: string) =>
       this.request<{ ok: boolean }>("POST", `/payments/${id}/void`, { reason }),
     receiptUrl: (id: string) => this.absoluteUrl(`/payments/${id}/receipt`),

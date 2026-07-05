@@ -3,7 +3,15 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import confetti from "canvas-confetti";
-import { createPaymentSchema, formatIQD, PAYMENT_METHOD_LABELS, type CreatePaymentDto } from "@manarah/shared";
+import {
+  createPaymentSchema,
+  formatIQD,
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_GATEWAYS,
+  PAYMENT_GATEWAY_LABELS,
+  type CreatePaymentDto,
+  type PaymentGateway,
+} from "@manarah/shared";
 import { toast } from "sonner";
 import { api } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
@@ -17,7 +25,7 @@ import { Skeleton } from "../ui/skeleton";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
-import { Wallet, AlertTriangle, TrendingUp, Receipt, Plus, Printer, Loader2, BellRing, Percent } from "lucide-react";
+import { Wallet, AlertTriangle, TrendingUp, Receipt, Plus, Printer, Loader2, BellRing, Percent, Smartphone } from "lucide-react";
 
 function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -49,7 +57,21 @@ function NewPaymentDialog({ open, onClose }: { open: boolean; onClose: () => voi
   });
 
   const selectedFeeId = watch("feeRecordId");
+  const amount = watch("amount");
   const selectedFee = unpaid.find((f) => f.id === selectedFeeId);
+  const [gateway, setGateway] = useState<PaymentGateway>("zaincash");
+
+  // دفع إلكتروني — يولّد رابط بوابة (زين كاش…) يُفتح في نافذة/يُرسل لولي الأمر
+  const checkout = useMutation({
+    mutationFn: () => api.fees.checkout({ feeRecordId: selectedFeeId, amount: Number(amount), gateway }),
+    onSuccess: (r) => {
+      window.open(r.checkoutUrl, "_blank", "noopener");
+      toast.success(`رابط دفع ${PAYMENT_GATEWAY_LABELS[gateway]} جاهز`, {
+        description: "فُتحت البوابة في نافذة جديدة — يمكن إرسال الرابط لولي الأمر لإتمام الدفع.",
+      });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "تعذّر إنشاء رابط الدفع"),
+  });
 
   const create = useMutation({
     mutationFn: (dto: CreatePaymentDto) => api.fees.createPayment(dto),
@@ -132,6 +154,39 @@ function NewPaymentDialog({ open, onClose }: { open: boolean; onClose: () => voi
             {create.isPending ? "جارٍ الحفظ..." : "إصدار السند"}
           </Button>
         </form>
+
+        {/* دفع إلكتروني — بديل عن التحصيل النقدي: يولّد رابط بوابة يُرسل لولي الأمر */}
+        <div className="mt-1 border-t border-border pt-3 space-y-2">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <Smartphone size={15} className="text-brand" />
+            <span>أو حصّل عبر محفظة إلكترونية (رابط دفع لولي الأمر)</span>
+          </div>
+          <div className="flex items-end gap-2">
+            <div className="flex-1 space-y-1.5">
+              <label htmlFor="pay-gateway" className="text-foreground">بوابة الدفع</label>
+              <select
+                id="pay-gateway"
+                value={gateway}
+                onChange={(e) => setGateway(e.target.value as PaymentGateway)}
+                className="w-full h-9 rounded-md border border-input bg-input-background px-3"
+              >
+                {PAYMENT_GATEWAYS.map((g) => (
+                  <option key={g} value={g}>{PAYMENT_GATEWAY_LABELS[g]}</option>
+                ))}
+              </select>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              className="gap-2"
+              disabled={!selectedFeeId || !amount || amount <= 0 || checkout.isPending}
+              onClick={() => checkout.mutate()}
+            >
+              {checkout.isPending ? <Loader2 size={16} className="animate-spin" /> : <Smartphone size={16} />}
+              رابط دفع
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );

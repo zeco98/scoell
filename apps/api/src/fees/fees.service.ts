@@ -1,7 +1,11 @@
 import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
-import type { CreatePaymentDto } from "@manarah/shared";
+import { Prisma } from "@prisma/client";
+import { randomUUID } from "crypto";
+import { PAYMENT_GATEWAY_LABELS, type CreateCheckoutDto, type CreatePaymentDto } from "@manarah/shared";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService, type AuditContext } from "../audit/audit.service";
+import { NotificationsService } from "../notifications/notifications.service";
+import { StubPaymentProvider, renderGatewayPage } from "./payment-provider";
 import {
   tenantWhere,
   requireTenant,
@@ -18,6 +22,8 @@ export class FeesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly audit: AuditService,
+    private readonly notifications: NotificationsService,
+    private readonly gateway: StubPaymentProvider,
   ) {}
 
   async listRecords(user: AuthUser, q: { status?: string; query?: string; page?: number; pageSize?: number }) {
@@ -121,8 +127,58 @@ export class FeesService {
   }
 
   /**
-   * سند قبض جديد — الترقيم التسلسلي بلا فراغات مضمون بمعاملة واحدة:
-   * زيادة العدّاد وإنشاء السند وتحديث القسط تنجح كلها أو تفشل كلها.
+   * إصدار سند قبض داخل معاملة واحدة — قلب الترقيم التسلسلي بلا فراغات.
+   * يُعاد استخدامه من الدفع اليدوي (createPayment) والدفع الإلكتروني (confirmIntent).
+   * يعمل ضمن معاملة مُمرَّرة (tx) إن وُجدت، وإلا يفتح معاملته الخاصة.
+   */
+  private async issueReceipt(
+    args: {
+      tenantId: string;
+      fee: { id: string; total: number; paid: number; dueDate: string; studentId: string };
+      amount: number;
+      method: string;
+      note?: string | null;
+      receivedById: string;
+      receivedBy: string;
+    },
+    tx?: Prisma.TransactionClient,
+  ) {
+    const run = async (t: Prisma.TransactionClient) => {
+      const year = new Date().getFullYear();
+      const counter = await t.receiptCounter.upsert({
+        where: { tenantId_year: { tenantId: args.tenantId, year } },
+        create: { tenantId: args.tenantId, year, value: 1 },
+        update: { value: { increment: 1 } },
+      });
+      const seq = counter.value;
+      const receiptNo = `RC-${year}-${String(1000 + seq)}`;
+      const created = await t.payment.create({
+        data: {
+          tenantId: args.tenantId,
+          year,
+          seq,
+          receiptNo,
+          feeRecordId: args.fee.id,
+          studentId: args.fee.studentId,
+          amount: args.amount,
+          method: args.method,
+          note: args.note,
+          receivedById: args.receivedById,
+          receivedBy: args.receivedBy,
+        },
+      });
+      const newPaid = args.fee.paid + args.amount;
+      await t.feeRecord.update({
+        where: { id: args.fee.id },
+        data: { paid: newPaid, status: feeStatus(args.fee.total, newPaid, args.fee.dueDate) },
+      });
+      return created;
+    };
+    return tx ? run(tx) : this.prisma.$transaction(run);
+  }
+
+  /**
+   * سند قبض يدوي (نقدًا/تحويل/بطاقة) — يصدره المحاسب/المدير.
    */
   async createPayment(user: AuthUser, dto: CreatePaymentDto, ctx: AuditContext) {
     const tenantId = requireTenant(user);
@@ -136,36 +192,14 @@ export class FeesService {
       throw new BadRequestException(`المبلغ أكبر من المتبقي (${remaining.toLocaleString("en")} د.ع)`);
     }
 
-    const year = new Date().getFullYear();
-    const payment = await this.prisma.$transaction(async (tx) => {
-      const counter = await tx.receiptCounter.upsert({
-        where: { tenantId_year: { tenantId, year } },
-        create: { tenantId, year, value: 1 },
-        update: { value: { increment: 1 } },
-      });
-      const seq = counter.value;
-      const receiptNo = `RC-${year}-${String(1000 + seq)}`;
-      const created = await tx.payment.create({
-        data: {
-          tenantId,
-          year,
-          seq,
-          receiptNo,
-          feeRecordId: fee.id,
-          studentId: fee.studentId,
-          amount: dto.amount,
-          method: dto.method,
-          note: dto.note,
-          receivedById: user.id,
-          receivedBy: user.name,
-        },
-      });
-      const newPaid = fee.paid + dto.amount;
-      await tx.feeRecord.update({
-        where: { id: fee.id },
-        data: { paid: newPaid, status: feeStatus(fee.total, newPaid, fee.dueDate) },
-      });
-      return created;
+    const payment = await this.issueReceipt({
+      tenantId,
+      fee,
+      amount: dto.amount,
+      method: dto.method,
+      note: dto.note,
+      receivedById: user.id,
+      receivedBy: user.name,
     });
 
     await this.audit.log({
@@ -180,6 +214,157 @@ export class FeesService {
 
     const fullyPaid = fee.paid + dto.amount >= fee.total;
     return { ...payment, student: fee.student, fullyPaid };
+  }
+
+  // =========================================================================
+  // الدفع الإلكتروني (بوابة عراقية) — checkout → callback → سند تسلسلي
+  // =========================================================================
+
+  /**
+   * بدء دفع إلكتروني لقسط. ولي الأمر/الطالب يدفع لسجله فقط؛ المحاسب/المدير لأي
+   * قسط في مؤسسته. يُنشئ نية دفع ويعيد رابط بوابة (زين كاش…). لا سند بعد.
+   */
+  async createCheckout(user: AuthUser, dto: CreateCheckoutDto, baseUrl: string, ctx: AuditContext) {
+    const scope = OWN_SCOPE_ROLES.includes(user.role) ? ownStudentRelationWhere(user) : tenantWhere(user);
+    const fee = await this.prisma.feeRecord.findFirst({
+      where: { id: dto.feeRecordId, ...scope },
+      include: { student: true, tenant: { select: { name: true } } },
+    });
+    if (!fee) throw new NotFoundException("القسط غير موجود");
+    const remaining = fee.total - fee.paid;
+    if (remaining <= 0) throw new BadRequestException("القسط مسدّد بالكامل");
+    if (dto.amount > remaining) {
+      throw new BadRequestException(`المبلغ أكبر من المتبقي (${remaining.toLocaleString("en")} د.ع)`);
+    }
+
+    const providerRef = `PI-${randomUUID().slice(0, 18)}`;
+    const intent = await this.prisma.paymentIntent.create({
+      data: {
+        tenantId: fee.tenantId,
+        studentId: fee.studentId,
+        feeRecordId: fee.id,
+        amount: dto.amount,
+        gateway: dto.gateway,
+        providerRef,
+        createdById: user.id,
+      },
+    });
+    const checkout = await this.gateway.createCheckout({
+      providerRef,
+      amount: dto.amount,
+      gateway: dto.gateway,
+      studentName: fee.student.name,
+      description: `قسط ${fee.plan} — ${fee.student.name}`,
+      baseUrl,
+    });
+    await this.audit.log({
+      user,
+      tenantId: fee.tenantId,
+      action: `بدء دفع إلكتروني (${PAYMENT_GATEWAY_LABELS[dto.gateway]}) ${dto.amount.toLocaleString("en")} د.ع — ${fee.student.name}`,
+      entity: "PaymentIntent",
+      entityId: intent.id,
+      after: { amount: dto.amount, gateway: dto.gateway },
+      ctx,
+    });
+    return { intentId: intent.id, providerRef, checkoutUrl: checkout.checkoutUrl, amount: dto.amount, gateway: dto.gateway };
+  }
+
+  /** صفحة بوابة محاكاة (زر تأكيد يستدعي الـ callback بتوقيع صحيح) */
+  async gatewayPage(providerRef: string, baseUrl: string): Promise<string> {
+    const intent = await this.prisma.paymentIntent.findUnique({ where: { providerRef } });
+    if (!intent) throw new NotFoundException("عملية الدفع غير موجودة");
+    const student = await this.prisma.student.findUnique({ where: { id: intent.studentId }, select: { name: true } });
+    const signature = this.gateway.sign(providerRef);
+    const done = intent.status !== "pending";
+    return renderGatewayPage({
+      providerRef,
+      signature,
+      amount: intent.amount,
+      gateway: intent.gateway,
+      studentName: student?.name ?? "",
+      baseUrl,
+      done,
+      status: intent.status,
+    });
+  }
+
+  /**
+   * callback البوابة — يؤكد النية ويصدر سندًا تسلسليًا داخل معاملة، ثم يُشعر
+   * ولي الأمر عبر واتساب/داخلي. idempotent: نية مؤكَّدة مسبقًا لا تُكرَّر.
+   */
+  async confirmCallback(providerRef: string, signature: string, outcome: "paid" | "failed") {
+    if (!this.gateway.verifySignature(providerRef, signature)) {
+      throw new ForbiddenException("توقيع غير صالح");
+    }
+    const intent = await this.prisma.paymentIntent.findUnique({ where: { providerRef } });
+    if (!intent) throw new NotFoundException("عملية الدفع غير موجودة");
+    if (intent.status === "confirmed") return { ok: true, alreadyConfirmed: true, paymentId: intent.paymentId };
+    if (intent.status !== "pending") throw new BadRequestException("عملية الدفع منتهية");
+
+    if (outcome === "failed") {
+      await this.prisma.paymentIntent.update({ where: { id: intent.id }, data: { status: "failed" } });
+      return { ok: false, status: "failed" };
+    }
+
+    const fee = await this.prisma.feeRecord.findUnique({
+      where: { id: intent.feeRecordId },
+      include: { student: { select: { id: true, name: true, guardianUserId: true, guardianPhone: true } } },
+    });
+    if (!fee) throw new NotFoundException("القسط غير موجود");
+    // الحد الأقصى المتبقي وقت التأكيد (قد يكون دُفع جزئيًا يدويًا بين البدء والتأكيد)
+    const amount = Math.min(intent.amount, fee.total - fee.paid);
+    if (amount <= 0) {
+      await this.prisma.paymentIntent.update({ where: { id: intent.id }, data: { status: "expired" } });
+      return { ok: false, status: "expired" };
+    }
+
+    const payment = await this.prisma.$transaction(async (tx) => {
+      const created = await this.issueReceipt(
+        {
+          tenantId: fee.tenantId,
+          fee,
+          amount,
+          method: "ONLINE",
+          note: `دفع إلكتروني — ${PAYMENT_GATEWAY_LABELS[intent.gateway as keyof typeof PAYMENT_GATEWAY_LABELS] ?? intent.gateway}`,
+          receivedById: intent.createdById,
+          receivedBy: PAYMENT_GATEWAY_LABELS[intent.gateway as keyof typeof PAYMENT_GATEWAY_LABELS] ?? intent.gateway,
+        },
+        tx,
+      );
+      await tx.paymentIntent.update({ where: { id: intent.id }, data: { status: "confirmed", paymentId: created.id } });
+      return created;
+    });
+
+    await this.audit.log({
+      user: null,
+      tenantId: fee.tenantId,
+      action: `دفع إلكتروني مؤكَّد ${payment.receiptNo}: ${amount.toLocaleString("en")} د.ع — ${fee.student.name}`,
+      entity: "Payment",
+      entityId: payment.receiptNo,
+      after: { amount, gateway: intent.gateway, providerRef },
+    });
+
+    // إشعار ولي الأمر: داخلي (لحساب ولي الأمر إن وُجد) + واتساب لرقمه المسجّل
+    const shortBody = `تم استلام دفعة ${amount.toLocaleString("en")} د.ع للطالب ${fee.student.name}. رقم السند: ${payment.receiptNo}.`;
+    if (fee.student.guardianUserId) {
+      await this.notifications.notify(fee.student.guardianUserId, {
+        title: "تأكيد دفع القسط",
+        body: shortBody,
+        kind: "payment",
+      });
+    }
+    // واتساب — القناة الأولى للعراق. رقم ولي الأمر مخزّن على سجل الطالب مباشرة
+    const guardianPhone = fee.student.guardianPhone?.trim();
+    if (guardianPhone) {
+      await this.notifications.sendExternal(
+        "WHATSAPP",
+        guardianPhone,
+        "تأكيد دفع القسط",
+        `${shortBody} شكرًا لكم — منارة.`,
+      );
+    }
+
+    return { ok: true, status: "confirmed", receiptNo: payment.receiptNo, paymentId: payment.id };
   }
 
   /** إلغاء منطقي — SUPER_ADMIN فقط، بقيد تدقيق حرج. لا حذف نهائي أبدًا. */

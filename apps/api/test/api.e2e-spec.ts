@@ -252,6 +252,111 @@ describe("Manarah API (e2e)", () => {
       .expect(400);
   });
 
+  // 5ب — الدفع الإلكتروني: checkout → بوابة → callback موقّع → سند ONLINE
+  /** يستخرج التوقيع المضمَّن في صفحة البوابة المحاكاة */
+  function sigFromGatewayPage(html: string): string {
+    const m = html.match(/signature:"([0-9a-f]+)"/);
+    if (!m) throw new Error("لم يُعثر على التوقيع في صفحة البوابة");
+    return m[1];
+  }
+
+  it("online pay: checkout→callback موقّع يصدر سندًا ONLINE ويحدّث الرصيد ويشعر واتساب", async () => {
+    const acc = await login("acc-a@test.io");
+    // قسط جديد مستقل حتى لا يتأثر بالاختبارات الأخرى
+    const fee = await prisma.feeRecord.create({
+      data: { tenantId: ids.tenantA, studentId: ids.student, plan: "دفع إلكتروني", total: 400000, dueDate: "2026-10-01" },
+    });
+
+    const co = await request(app.getHttpServer())
+      .post("/api/payments/checkout")
+      .set("Authorization", `Bearer ${acc.accessToken}`)
+      .send({ feeRecordId: fee.id, amount: 400000, gateway: "zaincash" })
+      .expect(201);
+    expect(co.body.providerRef).toMatch(/^PI-/);
+    expect(co.body.checkoutUrl).toContain(`/api/payments/gateway/${co.body.providerRef}`);
+
+    // صفحة البوابة عامة (بلا توكن) وتحمل المبلغ والتوقيع
+    const page = await request(app.getHttpServer()).get(`/api/payments/gateway/${co.body.providerRef}`).expect(200);
+    expect(page.text).toContain("زين كاش");
+    const signature = sigFromGatewayPage(page.text);
+
+    // توقيع مزوّر يُرفض 403 ولا يصدر سندًا
+    await request(app.getHttpServer())
+      .post("/api/payments/callback")
+      .send({ providerRef: co.body.providerRef, signature: "deadbeefdeadbeef", outcome: "paid" })
+      .expect(403);
+
+    // callback موقّع صحيح → تأكيد + سند
+    const cb = await request(app.getHttpServer())
+      .post("/api/payments/callback")
+      .send({ providerRef: co.body.providerRef, signature, outcome: "paid" })
+      .expect(201);
+    expect(cb.body.status).toBe("confirmed");
+    expect(cb.body.receiptNo).toMatch(/^RC-/);
+
+    // السند مُسجّل بطريقة ONLINE، والرصيد اكتمل
+    const payment = await prisma.payment.findUniqueOrThrow({ where: { id: cb.body.paymentId } });
+    expect(payment.method).toBe("ONLINE");
+    expect(payment.amount).toBe(400000);
+    const updated = await prisma.feeRecord.findUniqueOrThrow({ where: { id: fee.id } });
+    expect(updated.paid).toBe(400000);
+    expect(updated.status).toBe("paid");
+
+    // idempotency: إعادة نفس الـ callback لا تصدر سندًا ثانيًا
+    const replay = await request(app.getHttpServer())
+      .post("/api/payments/callback")
+      .send({ providerRef: co.body.providerRef, signature, outcome: "paid" })
+      .expect(201);
+    expect(replay.body.alreadyConfirmed).toBe(true);
+    expect(replay.body.paymentId).toBe(cb.body.paymentId);
+    const count = await prisma.payment.count({ where: { feeRecordId: fee.id } });
+    expect(count).toBe(1);
+  });
+
+  it("online pay: نتيجة failed تُعلّم النية فاشلة بلا سند", async () => {
+    const acc = await login("acc-a@test.io");
+    const fee = await prisma.feeRecord.create({
+      data: { tenantId: ids.tenantA, studentId: ids.student, plan: "دفع فاشل", total: 150000, dueDate: "2026-10-01" },
+    });
+    const co = await request(app.getHttpServer())
+      .post("/api/payments/checkout")
+      .set("Authorization", `Bearer ${acc.accessToken}`)
+      .send({ feeRecordId: fee.id, amount: 150000 })
+      .expect(201);
+    const page = await request(app.getHttpServer()).get(`/api/payments/gateway/${co.body.providerRef}`).expect(200);
+    const signature = sigFromGatewayPage(page.text);
+    const cb = await request(app.getHttpServer())
+      .post("/api/payments/callback")
+      .send({ providerRef: co.body.providerRef, signature, outcome: "failed" })
+      .expect(201);
+    expect(cb.body.ok).toBe(false);
+    expect(cb.body.status).toBe("failed");
+    const count = await prisma.payment.count({ where: { feeRecordId: fee.id } });
+    expect(count).toBe(0);
+  });
+
+  it("online pay RBAC: الطالب يبدأ دفع قسطه ويُمنع من قسط زميله (404)", async () => {
+    const student = await login("student-a@test.io");
+    const ownFee = await prisma.feeRecord.create({
+      data: { tenantId: ids.tenantA, studentId: ids.student, plan: "قسط الطالب", total: 120000, dueDate: "2026-10-01" },
+    });
+    const mateFee = await prisma.feeRecord.create({
+      data: { tenantId: ids.tenantA, studentId: ids.classmate, plan: "قسط الزميل", total: 120000, dueDate: "2026-10-01" },
+    });
+    // قسطه هو → مسموح
+    await request(app.getHttpServer())
+      .post("/api/payments/checkout")
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .send({ feeRecordId: ownFee.id, amount: 120000 })
+      .expect(201);
+    // قسط زميله → ممنوع (خارج نطاق ownStudentWhere)
+    await request(app.getHttpServer())
+      .post("/api/payments/checkout")
+      .set("Authorization", `Bearer ${student.accessToken}`)
+      .send({ feeRecordId: mateFee.id, amount: 120000 })
+      .expect(404);
+  });
+
   // 6 — الدرجات: كل تعديل بقيمته القديمة والجديدة
   it("grade+audit: تعديل درجة يسجَّل في التدقيق بقيمتي قبل/بعد", async () => {
     const teacher = await login("teacher-a@test.io");

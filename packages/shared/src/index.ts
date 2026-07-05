@@ -50,14 +50,34 @@ export type AttendanceMark = (typeof ATTENDANCE_MARKS)[number];
 export const FEE_STATUSES = ["paid", "partial", "overdue"] as const;
 export type FeeStatus = (typeof FEE_STATUSES)[number];
 
-export const PAYMENT_METHODS = ["CASH", "TRANSFER", "CARD"] as const;
+export const PAYMENT_METHODS = ["CASH", "TRANSFER", "CARD", "ONLINE"] as const;
 export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   CASH: "نقدًا",
   TRANSFER: "تحويل",
   CARD: "بطاقة",
+  ONLINE: "دفع إلكتروني",
 };
+
+// مزوّدو الدفع الإلكتروني العراقيون (المحافظ)
+export const PAYMENT_GATEWAYS = ["zaincash", "asiahawala", "fastpay", "qi"] as const;
+export type PaymentGateway = (typeof PAYMENT_GATEWAYS)[number];
+
+export const PAYMENT_GATEWAY_LABELS: Record<PaymentGateway, string> = {
+  zaincash: "زين كاش",
+  asiahawala: "آسيا حوالة",
+  fastpay: "فاست باي",
+  qi: "Qi",
+};
+
+// قنوات الدفع الإلكتروني DTO
+export const createCheckoutSchema = z.object({
+  feeRecordId: z.string().min(1, "حدّد القسط"),
+  amount: z.number().int().positive("المبلغ يجب أن يكون موجبًا"),
+  gateway: z.enum(PAYMENT_GATEWAYS, { message: "حدّد بوابة الدفع" }).default("zaincash"),
+});
+export type CreateCheckoutDto = z.infer<typeof createCheckoutSchema>;
 
 export const MESSAGE_STATUSES = ["sent", "scheduled", "draft", "failed"] as const;
 export type MessageStatus = (typeof MESSAGE_STATUSES)[number];

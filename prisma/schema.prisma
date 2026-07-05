@@ -224,6 +224,25 @@ model ReceiptCounter {
   @@id([tenantId, year])
 }
 
+// نية دفع إلكتروني — تُنشأ عند بدء الدفع عبر بوابة (زين كاش…)، وعند التأكيد
+// تتحوّل إلى سند قبض حقيقي بالترقيم التسلسلي نفسه. providerRef فريد يربط الـ callback.
+model PaymentIntent {
+  id          String   @id @default(cuid())
+  tenantId    String
+  studentId   String
+  feeRecordId String
+  amount      Int
+  gateway     String   @default("zaincash") // zaincash|asiahawala|fastpay|qi
+  providerRef String   @unique
+  status      String   @default("pending") // pending|confirmed|failed|expired
+  paymentId   String? // ربط بالسند بعد التأكيد
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId, status])
+}
+
 model Discount {
   id          String   @id @default(cuid())
   tenantId    String
