@@ -114,6 +114,9 @@ export const ROLES = [
 
 export type Role = (typeof ROLES)[number];
 
+/** الأدوار التسعة كاملة — مصدر واحد بدل تكرار المصفوفة في كل متحكم */
+export const ALL_ROLES: readonly Role[] = ROLES;
+
 export const ROLE_LABELS: Record<Role, string> = {
   SUPER_ADMIN: "المدير العام",
   SCHOOL_ADMIN: "مدير المدرسة",
@@ -296,3 +299,39 @@ export function formatNum(n: number, numerals: "western" | "eastern" = "western"
   const locale = numerals === "eastern" ? "ar-IQ" : "ar-IQ-u-nu-latn";
   return new Intl.NumberFormat(locale).format(n);
 }
+
+// ---------------------------------------------------------------------------
+// سجل الميزات لكل مؤسسة (Feature Flags) — مصدر الحقيقة الوحيد لمفاتيح الميزات
+// وتسمياتها العربية وقيمتها الافتراضية. كل الميزات مفعّلة افتراضيًا لضمان
+// عدم تغيير أي سلوك حالي عند تفعيل النظام؛ التعطيل يكون صريحًا لاحقًا لكل
+// مؤسسة عبر TenantFeature.
+// ---------------------------------------------------------------------------
+export const FEATURES = [
+  { key: "AI_ASSISTANT", labelAr: "المساعد الذكي", defaultEnabled: true },
+  { key: "ACCOUNTING", labelAr: "المحاسبة", defaultEnabled: true },
+  { key: "PARENT_PORTAL", labelAr: "بوابة أولياء الأمور", defaultEnabled: true },
+  { key: "STUDENT_PORTAL", labelAr: "بوابة الطلاب", defaultEnabled: true },
+  { key: "TEACHER_PORTAL", labelAr: "بوابة المعلّمين", defaultEnabled: true },
+  { key: "ATTENDANCE", labelAr: "الحضور والغياب", defaultEnabled: true },
+  { key: "EXAMS", labelAr: "الامتحانات", defaultEnabled: true },
+  { key: "GRADES_RESULTS", labelAr: "الدرجات والنتائج", defaultEnabled: true },
+  { key: "CERTIFICATES_DOCUMENTS", labelAr: "الشهادات والوثائق", defaultEnabled: true },
+  { key: "LIBRARY", labelAr: "المكتبة", defaultEnabled: true },
+  { key: "TRANSPORTATION", labelAr: "النقل المدرسي", defaultEnabled: true },
+  { key: "NOTIFICATIONS", labelAr: "الإشعارات", defaultEnabled: true },
+  { key: "SMS", labelAr: "الرسائل النصية", defaultEnabled: true },
+  { key: "EMAIL", labelAr: "البريد الإلكتروني", defaultEnabled: true },
+  { key: "QR_VERIFICATION", labelAr: "التحقق عبر رمز QR", defaultEnabled: true },
+  { key: "ONLINE_PAYMENTS", labelAr: "الدفع الإلكتروني", defaultEnabled: true },
+  { key: "REPORTS", labelAr: "التقارير", defaultEnabled: true },
+  { key: "ANALYTICS_DASHBOARD", labelAr: "لوحة التحليلات", defaultEnabled: true },
+  { key: "FILE_MANAGER", labelAr: "إدارة الملفات", defaultEnabled: true },
+  { key: "API_ACCESS", labelAr: "الوصول عبر API", defaultEnabled: true },
+  { key: "BACKUP_RESTORE", labelAr: "النسخ الاحتياطي والاستعادة", defaultEnabled: true },
+] as const satisfies readonly { key: string; labelAr: string; defaultEnabled: boolean }[];
+
+export type FeatureKey = (typeof FEATURES)[number]["key"];
+
+export const DEFAULT_FEATURE_ENABLED: Record<FeatureKey, boolean> = Object.fromEntries(
+  FEATURES.map((f) => [f.key, f.defaultEnabled]),
+) as Record<FeatureKey, boolean>;

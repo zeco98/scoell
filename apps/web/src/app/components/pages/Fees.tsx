@@ -15,6 +15,7 @@ import {
 import { toast } from "sonner";
 import { api } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
+import { useFeature } from "../../features/FeatureFlagsProvider";
 import { PageHeader, StatCard, StatusPill, EmptyState, QueryError } from "../shared";
 import { CountUp } from "../motion";
 import { Card } from "../ui/card";
@@ -60,6 +61,7 @@ function NewPaymentDialog({ open, onClose }: { open: boolean; onClose: () => voi
   const amount = watch("amount");
   const selectedFee = unpaid.find((f) => f.id === selectedFeeId);
   const [gateway, setGateway] = useState<PaymentGateway>("zaincash");
+  const onlinePaymentsEnabled = useFeature("ONLINE_PAYMENTS");
 
   // دفع إلكتروني — يولّد رابط بوابة (زين كاش…) يُفتح في نافذة/يُرسل لولي الأمر
   const checkout = useMutation({
@@ -156,37 +158,39 @@ function NewPaymentDialog({ open, onClose }: { open: boolean; onClose: () => voi
         </form>
 
         {/* دفع إلكتروني — بديل عن التحصيل النقدي: يولّد رابط بوابة يُرسل لولي الأمر */}
-        <div className="mt-1 border-t border-border pt-3 space-y-2">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <Smartphone size={15} className="text-brand" />
-            <span>أو حصّل عبر محفظة إلكترونية (رابط دفع لولي الأمر)</span>
-          </div>
-          <div className="flex items-end gap-2">
-            <div className="flex-1 space-y-1.5">
-              <label htmlFor="pay-gateway" className="text-foreground">بوابة الدفع</label>
-              <select
-                id="pay-gateway"
-                value={gateway}
-                onChange={(e) => setGateway(e.target.value as PaymentGateway)}
-                className="w-full h-9 rounded-md border border-input bg-input-background px-3"
-              >
-                {PAYMENT_GATEWAYS.map((g) => (
-                  <option key={g} value={g}>{PAYMENT_GATEWAY_LABELS[g]}</option>
-                ))}
-              </select>
+        {onlinePaymentsEnabled && (
+          <div className="mt-1 border-t border-border pt-3 space-y-2">
+            <div className="flex items-center gap-2 text-muted-foreground">
+              <Smartphone size={15} className="text-brand" />
+              <span>أو حصّل عبر محفظة إلكترونية (رابط دفع لولي الأمر)</span>
             </div>
-            <Button
-              type="button"
-              variant="outline"
-              className="gap-2"
-              disabled={!selectedFeeId || !amount || amount <= 0 || checkout.isPending}
-              onClick={() => checkout.mutate()}
-            >
-              {checkout.isPending ? <Loader2 size={16} className="animate-spin" /> : <Smartphone size={16} />}
-              رابط دفع
-            </Button>
+            <div className="flex items-end gap-2">
+              <div className="flex-1 space-y-1.5">
+                <label htmlFor="pay-gateway" className="text-foreground">بوابة الدفع</label>
+                <select
+                  id="pay-gateway"
+                  value={gateway}
+                  onChange={(e) => setGateway(e.target.value as PaymentGateway)}
+                  className="w-full h-9 rounded-md border border-input bg-input-background px-3"
+                >
+                  {PAYMENT_GATEWAYS.map((g) => (
+                    <option key={g} value={g}>{PAYMENT_GATEWAY_LABELS[g]}</option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                className="gap-2"
+                disabled={!selectedFeeId || !amount || amount <= 0 || checkout.isPending}
+                onClick={() => checkout.mutate()}
+              >
+                {checkout.isPending ? <Loader2 size={16} className="animate-spin" /> : <Smartphone size={16} />}
+                رابط دفع
+              </Button>
+            </div>
           </div>
-        </div>
+        )}
       </DialogContent>
     </Dialog>
   );

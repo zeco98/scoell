@@ -2,9 +2,9 @@ import { Body, Controller, Get, Post, Req, Res } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import type { Request, Response } from "express";
-import { loginSchema } from "@manarah/shared";
+import { ALL_ROLES, loginSchema } from "@manarah/shared";
 import { z } from "zod";
-import { Public, CurrentUser } from "../common/decorators";
+import { Public, CurrentUser, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
 import { auditCtx, type AuthUser, type AuthedRequest } from "../common/types";
 import { AuthService } from "./auth.service";
@@ -77,12 +77,14 @@ export class AuthController {
   }
 
   @ApiBearerAuth()
+  @Roles(...ALL_ROLES)
   @Get("me")
   me(@CurrentUser() user: AuthUser) {
     return this.auth.me(user.id);
   }
 
   @ApiBearerAuth()
+  @Roles(...ALL_ROLES)
   @Post("change-password")
   changePassword(
     @Body(new ZodPipe(changePasswordSchema)) body: z.infer<typeof changePasswordSchema>,

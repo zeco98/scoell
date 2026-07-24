@@ -14,6 +14,7 @@ import type {
   BulkAttendanceDto,
   CreateMessageDto,
   Role,
+  FeatureKey,
 } from "@manarah/shared";
 
 export interface TokenStore {
@@ -313,6 +314,14 @@ export class ManarahClient {
       this.request<{ tenantId: string; name: string; settings: TenantSettings }>("GET", "/tenants/mine/settings"),
     updateSettings: (settings: Partial<TenantSettings>) =>
       this.request<{ settings: TenantSettings }>("PATCH", "/tenants/mine/settings", settings),
+    /** أعلام الميزات لمؤسستي — متاحة لكل الأدوار المصادَقة (قراءة فقط) */
+    getMyFeatures: () => this.request<{ features: FeatureFlagDto[] }>("GET", "/tenants/mine/features"),
+    /** أعلام الميزات لمؤسسة محدَّدة — SUPER_ADMIN فقط */
+    getTenantFeatures: (tenantId: string) =>
+      this.request<TenantFeaturesDto>("GET", `/tenants/${tenantId}/features`),
+    /** تحديث أعلام ميزة/ميزات لمؤسسة محدَّدة — SUPER_ADMIN فقط */
+    updateTenantFeatures: (tenantId: string, updates: { key: FeatureKey; enabled: boolean }[]) =>
+      this.request<TenantFeaturesDto>("PATCH", `/tenants/${tenantId}/features`, { updates }),
   };
 
   // ------------------------------------------------------------------ misc
@@ -524,6 +533,18 @@ export interface TenantSettings {
   autoAbsenceNotify?: boolean;
   easternNumerals?: boolean;
   darkMode?: boolean;
+}
+
+/** علم ميزة مؤسسة واحد كما يعيده السيرفر (المفتاح + التسمية العربية + الحالة) */
+export interface FeatureFlagDto {
+  key: FeatureKey;
+  labelAr: string;
+  enabled: boolean;
+}
+
+export interface TenantFeaturesDto {
+  tenantId: string;
+  features: FeatureFlagDto[];
 }
 
 export interface AuditItem {

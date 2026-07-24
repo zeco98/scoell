@@ -1,10 +1,22 @@
-import { Body, Controller, Get, Param, Patch, Post, Req, ForbiddenException, NotFoundException } from "@nestjs/common";
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Req,
+  BadRequestException,
+  ForbiddenException,
+  NotFoundException,
+} from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { z } from "zod";
+import { ALL_ROLES, FEATURES, type FeatureKey } from "@manarah/shared";
 import { CurrentUser, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
-import { auditCtx as ctx, type AuthUser } from "../common/types";
+import { auditCtx as ctx, resolveTenantFeatures, type AuthUser } from "../common/types";
 import { PrismaService } from "../prisma/prisma.service";
 import { AuditService } from "../audit/audit.service";
 
@@ -23,6 +35,17 @@ const settingsSchema = z.object({
 });
 
 const tenantStatusSchema = z.object({ status: z.enum(["active", "trial", "suspended"]) });
+
+const featuresUpdateSchema = z.object({
+  updates: z
+    .array(
+      z.object({
+        key: z.string().min(1, "مفتاح الميزة مطلوب"),
+        enabled: z.boolean(),
+      }),
+    )
+    .min(1, "لا توجد تحديثات"),
+});
 
 
 @ApiTags("tenants")
@@ -149,5 +172,77 @@ export class TenantsController {
       ctx: ctx(req),
     });
     return { settings: after };
+  }
+
+  /** يحسم أعلام الميزات المفعّلة لمؤسسة معيّنة (افتراضيات + استثناءات محفوظة) */
+  private async resolvedFeatures(tenantId: string) {
+    const rows = await this.prisma.tenantFeature.findMany({
+      where: { tenantId },
+      select: { key: true, enabled: true },
+    });
+    const resolved = resolveTenantFeatures(rows);
+    return FEATURES.map((f) => ({ key: f.key, labelAr: f.labelAr, enabled: resolved[f.key] }));
+  }
+
+  /** أعلام الميزات لمؤسسة المستخدم الحالي — قراءة فقط، تُستخدم لتوجيه الواجهة */
+  @Get("mine/features")
+  @Roles(...ALL_ROLES)
+  async myFeatures(@CurrentUser() user: AuthUser) {
+    if (!user.tenantId) {
+      // أدوار المنصة بلا مؤسسة — كل الميزات بقيمتها الافتراضية
+      const defaults = resolveTenantFeatures([]);
+      return { features: FEATURES.map((f) => ({ key: f.key, labelAr: f.labelAr, enabled: defaults[f.key] })) };
+    }
+    return { features: await this.resolvedFeatures(user.tenantId) };
+  }
+
+  @Get(":id/features")
+  @Roles("SUPER_ADMIN")
+  async getFeatures(@Param("id") id: string) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id }, select: { id: true } });
+    if (!tenant) throw new NotFoundException("المؤسسة غير موجودة");
+    return { tenantId: id, features: await this.resolvedFeatures(id) };
+  }
+
+  @Patch(":id/features")
+  @Roles("SUPER_ADMIN")
+  async updateFeatures(
+    @Param("id") id: string,
+    @Body(new ZodPipe(featuresUpdateSchema)) body: z.infer<typeof featuresUpdateSchema>,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    const tenant = await this.prisma.tenant.findUnique({ where: { id }, select: { id: true } });
+    if (!tenant) throw new NotFoundException("المؤسسة غير موجودة");
+
+    const validKeys = new Set(FEATURES.map((f) => f.key as string));
+    for (const u of body.updates) {
+      if (!validKeys.has(u.key)) {
+        throw new BadRequestException(`مفتاح ميزة غير معروف: ${u.key}`);
+      }
+    }
+
+    await this.prisma.$transaction(
+      body.updates.map((u) =>
+        this.prisma.tenantFeature.upsert({
+          where: { tenantId_key: { tenantId: id, key: u.key } },
+          update: { enabled: u.enabled, updatedBy: user.id },
+          create: { tenantId: id, key: u.key, enabled: u.enabled, updatedBy: user.id },
+        }),
+      ),
+    );
+
+    await this.audit.log({
+      user,
+      tenantId: id,
+      action: `تحديث أعلام الميزات (${body.updates.length})`,
+      entity: "TenantFeature",
+      entityId: id,
+      after: { updates: body.updates },
+      severity: "warning",
+      ctx: ctx(req),
+    });
+
+    return { tenantId: id, features: await this.resolvedFeatures(id) };
   }
 }

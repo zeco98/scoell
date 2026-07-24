@@ -5,6 +5,7 @@ import { formatIQD } from "@manarah/shared";
 import { toast } from "sonner";
 import { api } from "../../lib/api";
 import { useAuth } from "../../auth/AuthProvider";
+import { useFeature } from "../../features/FeatureFlagsProvider";
 import { PageHeader, SectionCard, StatusPill, EmptyState, QueryError } from "../shared";
 import { Button } from "../ui/button";
 import { Skeleton } from "../ui/skeleton";
@@ -38,6 +39,8 @@ export function StudentProfile() {
   const { id = "" } = useParams();
   const navigate = useNavigate();
   const { user } = useAuth();
+  const certificatesEnabled = useFeature("CERTIFICATES_DOCUMENTS");
+  const gradesResultsEnabled = useFeature("GRADES_RESULTS");
   const qc = useQueryClient();
   const [archiveOpen, setArchiveOpen] = useState(false);
   const [moveOpen, setMoveOpen] = useState(false);
@@ -135,7 +138,7 @@ export function StudentProfile() {
         action={
           <div className="flex items-center gap-2 flex-wrap">
             <StatusPill status={s.status} />
-            {latestResult && (
+            {gradesResultsEnabled && latestResult && (
               <Button
                 variant="outline"
                 className="gap-2"
@@ -144,8 +147,8 @@ export function StudentProfile() {
                 <Printer size={16} /> كشف الدرجات
               </Button>
             )}
-            {/* الوثائق الرسمية — القوالب مقيَّدة بالدور (الحكم النهائي في السيرفر) */}
-            {(canCert || canTranscript || canStatement) && (
+            {/* الوثائق الرسمية — القوالب مقيَّدة بالدور (الحكم النهائي في السيرفر) وبميزة الشهادات والوثائق */}
+            {certificatesEnabled && (canCert || canTranscript || canStatement) && (
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" className="gap-2">

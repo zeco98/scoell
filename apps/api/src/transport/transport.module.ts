@@ -1,11 +1,12 @@
 import { Controller, Get, Module } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
-import { CurrentUser, Roles } from "../common/decorators";
+import { CurrentUser, Feature, Roles } from "../common/decorators";
 import { tenantWhere, type AuthUser } from "../common/types";
 import { PrismaService } from "../prisma/prisma.service";
 
 @ApiTags("transport")
 @ApiBearerAuth()
+@Feature("TRANSPORTATION")
 @Controller("routes")
 class TransportController {
   constructor(private readonly prisma: PrismaService) {}

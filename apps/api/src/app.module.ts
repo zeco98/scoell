@@ -7,6 +7,7 @@ import { AuditModule } from "./audit/audit.module";
 import { AuthModule } from "./auth/auth.module";
 import { JwtAuthGuard } from "./common/jwt-auth.guard";
 import { RolesGuard } from "./common/roles.guard";
+import { FeatureGuard } from "./common/feature.guard";
 import { StudentsModule } from "./students/students.module";
 import { FeesModule } from "./fees/fees.module";
 import { AttendanceModule } from "./attendance/attendance.module";
@@ -51,9 +52,10 @@ import { DocumentsModule } from "./documents/documents.module";
     DocumentsModule,
   ],
   providers: [
-    // الترتيب مهم: مصادقة ← صلاحيات ← rate limiting
+    // الترتيب مهم: مصادقة ← صلاحيات ← ميزات المؤسسة ← rate limiting
     { provide: APP_GUARD, useClass: JwtAuthGuard },
     { provide: APP_GUARD, useClass: RolesGuard },
+    { provide: APP_GUARD, useClass: FeatureGuard },
     { provide: APP_GUARD, useClass: ThrottlerGuard },
   ],
 })

@@ -2,7 +2,7 @@ import { Body, Controller, Get, Injectable, Module, NotFoundException, Param, Pa
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Request } from "express";
 import { z } from "zod";
-import { CurrentUser, Roles } from "../common/decorators";
+import { CurrentUser, Feature, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
 import { tenantWhere, requireTenant, auditCtx as ctx, type AuthUser } from "../common/types";
 import { PrismaService } from "../prisma/prisma.service";
@@ -44,6 +44,7 @@ const generateSchema = z.object({
 
 @ApiTags("ai")
 @ApiBearerAuth()
+@Feature("AI_ASSISTANT")
 @Controller("ai")
 class AiController {
   constructor(

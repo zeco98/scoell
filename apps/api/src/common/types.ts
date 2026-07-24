@@ -1,4 +1,4 @@
-import type { Role } from "@manarah/shared";
+import { DEFAULT_FEATURE_ENABLED, type FeatureKey, type Role } from "@manarah/shared";
 import type { Request } from "express";
 
 /** سياق التدقيق من الطلب — يُستخرج مرة واحدة بدل تكراره في كل متحكم */
@@ -61,4 +61,21 @@ export function ownStudentWhere(user: AuthUser): Record<string, unknown> {
 export function ownStudentRelationWhere(user: AuthUser): Record<string, unknown> {
   const inner = ownStudentWhere(user);
   return Object.keys(inner).length ? { student: inner } : {};
+}
+
+/**
+ * يحسم حالة أعلام الميزات لمؤسسة معيّنة: يبدأ من القيم الافتراضية
+ * (DEFAULT_FEATURE_ENABLED) ثم يطبّق فوقها أي صفوف TenantFeature محفوظة.
+ * مؤسسة بلا صفوف = كل الميزات بقيمتها الافتراضية (لا حاجة لتعبئة رجعية).
+ */
+export function resolveTenantFeatures(
+  rows: { key: string; enabled: boolean }[],
+): Record<FeatureKey, boolean> {
+  const result = { ...DEFAULT_FEATURE_ENABLED };
+  for (const row of rows) {
+    if (row.key in result) {
+      result[row.key as FeatureKey] = row.enabled;
+    }
+  }
+  return result;
 }

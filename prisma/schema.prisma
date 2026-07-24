@@ -41,6 +41,7 @@ model Tenant {
   employees   Employee[]
   routes      TransportRoute[]
   aiRequests  AiRequest[]
+  features    TenantFeature[]
 }
 
 model User {
@@ -431,4 +432,20 @@ model DocumentIssue {
   updatedAt  DateTime @updatedAt
 
   @@index([tenantId, studentId])
+}
+
+// أعلام الميزات لكل مؤسسة (Feature Flags) — مفاتيح مسجَّلة في FEATURES بحزمة
+// @manarah/shared. غياب صف لمفتاح معيّن يعني الاعتماد على defaultEnabled.
+model TenantFeature {
+  id        String   @id @default(cuid())
+  tenantId  String
+  key       String
+  enabled   Boolean  @default(true)
+  updatedBy String? // معرّف المستخدم الذي غيّر القيمة آخر مرة
+  updatedAt DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
 }

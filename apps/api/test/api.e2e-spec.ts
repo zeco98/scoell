@@ -65,6 +65,7 @@ describe("Manarah API (e2e)", () => {
     await mk("مدقق", "auditor@test.io", "AUDITOR", null); // دور منصة للقراءة فقط
     await mk("موارد بشرية أ", "hr-a@test.io", "HR", tenantA.id);
     const studentUserA = await mk("طالب الاختبار الأول", "student-a@test.io", "STUDENT", tenantA.id);
+    await mk("مدير المنصة", "super@test.io", "SUPER_ADMIN", null); // دور منصة — إدارة أعلام الميزات
     ids.adminB = adminB.id;
 
     // شعبة المؤسسة أ مملوكة للمعلم أ
@@ -826,5 +827,94 @@ describe("Manarah API (e2e)", () => {
 
     const bad = await request(app.getHttpServer()).get(`/api/documents/verify/${serial}?code=AAAA-BBBB-CCCC`).expect(200);
     expect(bad.body.valid).toBe(false);
+  });
+
+  // ==========================================================================
+  // أعلام الميزات لكل مؤسسة (Feature Flags) — إدارة + إنفاذ FeatureGuard فعليًا
+  // ==========================================================================
+
+  // 32 — GET /tenants/mine/features: الكل مفعّل افتراضيًا بلا أي صف محفوظ
+  it("features: مؤسسة بلا أعلام محفوظة ترى كل الميزات مفعّلة افتراضيًا", async () => {
+    const admin = await login("admin-a@test.io");
+    const res = await request(app.getHttpServer())
+      .get("/api/tenants/mine/features")
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .expect(200);
+    expect(res.body.features.length).toBeGreaterThan(0);
+    for (const f of res.body.features) expect(f.enabled).toBe(true);
+    // التسمية العربية سليمة (لا mojibake) لميزة الحضور
+    const attendance = res.body.features.find((f: { key: string }) => f.key === "ATTENDANCE");
+    expect(attendance.labelAr).toBe("الحضور والغياب");
+  });
+
+  // 33 — PATCH /tenants/:id/features: ممنوع على غير SUPER_ADMIN (لا مسار كتابة عبر mine)
+  it("features RBAC: مدير مدرسة عادي يُمنع من تعديل أعلام الميزات (403)", async () => {
+    const admin = await login("admin-a@test.io");
+    await request(app.getHttpServer())
+      .patch(`/api/tenants/${ids.tenantA}/features`)
+      .set("Authorization", `Bearer ${admin.accessToken}`)
+      .send({ updates: [{ key: "ATTENDANCE", enabled: false }] })
+      .expect(403);
+  });
+
+  // 34 — PATCH /tenants/:id/features: مفتاح غير معروف يُرفض 400 ولا يُكتب شيء
+  it("features: مفتاح ميزة غير معروف يُرفض بـ 400", async () => {
+    const superAdmin = await login("super@test.io");
+    await request(app.getHttpServer())
+      .patch(`/api/tenants/${ids.tenantA}/features`)
+      .set("Authorization", `Bearer ${superAdmin.accessToken}`)
+      .send({ updates: [{ key: "NOT_A_REAL_FEATURE", enabled: false }] })
+      .expect(400);
+    const row = await prisma.tenantFeature.findFirst({ where: { tenantId: ids.tenantA, key: "NOT_A_REAL_FEATURE" } });
+    expect(row).toBeNull();
+  });
+
+  // 35 — PATCH /tenants/:id/features + إنفاذ FeatureGuard: تعطيل الحضور لمؤسسة أ فقط
+  it("features: SUPER_ADMIN يعطّل ميزة الحضور لمؤسسة أ فقط، والحارس يمنع مؤسسة أ ولا يمس ب", async () => {
+    const superAdmin = await login("super@test.io");
+    const updated = await request(app.getHttpServer())
+      .patch(`/api/tenants/${ids.tenantA}/features`)
+      .set("Authorization", `Bearer ${superAdmin.accessToken}`)
+      .send({ updates: [{ key: "ATTENDANCE", enabled: false }] })
+      .expect(200);
+    expect(updated.body.tenantId).toBe(ids.tenantA);
+    const attendanceFlag = updated.body.features.find((f: { key: string }) => f.key === "ATTENDANCE");
+    expect(attendanceFlag.enabled).toBe(false);
+
+    // الصف حُفظ مقيّدًا بمؤسسة أ فقط
+    const rowA = await prisma.tenantFeature.findUnique({
+      where: { tenantId_key: { tenantId: ids.tenantA, key: "ATTENDANCE" } },
+    });
+    expect(rowA?.enabled).toBe(false);
+    const rowB = await prisma.tenantFeature.findUnique({
+      where: { tenantId_key: { tenantId: ids.tenantB, key: "ATTENDANCE" } },
+    });
+    expect(rowB).toBeNull(); // لم يُكتب أي شيء لمؤسسة ب
+
+    // معلم مؤسسة أ يُمنع الآن من مسار محمي بـ @Feature("ATTENDANCE") — برسالة محددة بالضبط
+    const teacherA = await login("teacher-a@test.io");
+    const blocked = await request(app.getHttpServer())
+      .get(`/api/attendance/report?sectionId=${ids.section}`)
+      .set("Authorization", `Bearer ${teacherA.accessToken}`)
+      .expect(403);
+    expect(blocked.body.message).toBe("This feature is not enabled for your school.");
+
+    // مدير مؤسسة ب غير متأثر — ميزة الحضور ما زالت مفعّلة له
+    const adminB = await login("admin-b@test.io");
+    await request(app.getHttpServer())
+      .get("/api/attendance/report")
+      .set("Authorization", `Bearer ${adminB.accessToken}`)
+      .expect(200);
+
+    // إعادة التفعيل تعيد الوصول لمؤسسة أ
+    await request(app.getHttpServer())
+      .patch(`/api/tenants/${ids.tenantA}/features`)
+      .set("Authorization", `Bearer ${superAdmin.accessToken}`)
+      .send({ updates: [{ key: "ATTENDANCE", enabled: true }] })
+      .expect(200);
+    await request(app.getHttpServer())
+      .get(`/api/attendance/report?sectionId=${ids.section}`)
+      .set("Authorization", `Bearer ${teacherA.accessToken}`)
+      .expect(200);
   });
 });

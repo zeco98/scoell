@@ -1,8 +1,10 @@
 import { Navigate, Outlet, useLocation } from "react-router";
 import { useAuth } from "./AuthProvider";
 import { canAccess } from "../data/nav";
-import { Forbidden } from "../components/pages/ErrorPages";
+import { Forbidden, FeatureDisabled } from "../components/pages/ErrorPages";
 import { LogoMark } from "../brand/Logo";
+import { useFeatureFlags } from "../features/FeatureFlagsProvider";
+import { featureForPath } from "../features/featureMap";
 
 function FullScreenLoader() {
   return (
@@ -29,5 +31,15 @@ export function RequireRole() {
   const { user } = useAuth();
   const location = useLocation();
   if (user && !canAccess(user.role, location.pathname)) return <Forbidden />;
+  return <Outlet />;
+}
+
+/** حارس أعلام الميزات — يمنع بقاء مسار "ميت" لميزة معطّلة لمؤسسة المستخدم
+ *  (الحكم الحقيقي في السيرفر عبر 403؛ هذا دفاع إضافي على الواجهة) */
+export function RequireFeature() {
+  const { features } = useFeatureFlags();
+  const location = useLocation();
+  const key = featureForPath(location.pathname);
+  if (key && !features[key]) return <FeatureDisabled />;
   return <Outlet />;
 }

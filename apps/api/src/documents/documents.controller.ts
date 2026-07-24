@@ -1,7 +1,7 @@
 import { Controller, Get, Param, Query, Res } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import type { Response } from "express";
-import { CurrentUser, Public, Roles } from "../common/decorators";
+import { CurrentUser, Feature, Public, Roles } from "../common/decorators";
 import type { AuthUser } from "../common/types";
 import { DocumentsService } from "./documents.service";
 
@@ -10,6 +10,7 @@ type CertKind = (typeof CERT_KINDS)[number];
 
 @ApiTags("documents")
 @ApiBearerAuth()
+@Feature("CERTIFICATES_DOCUMENTS")
 @Controller("documents")
 export class DocumentsController {
   constructor(private readonly docs: DocumentsService) {}

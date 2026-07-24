@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { createCheckoutSchema, createPaymentSchema, type CreateCheckoutDto, type CreatePaymentDto } from "@manarah/shared";
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { CurrentUser, Public, Roles } from "../common/decorators";
+import { CurrentUser, Feature, Public, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
 import { auditCtx as ctx, type AuthUser } from "../common/types";
 import { FeesService } from "./fees.service";
@@ -38,6 +38,7 @@ const discountSchema = z.object({
 
 @ApiTags("fees")
 @ApiBearerAuth()
+@Feature("ACCOUNTING")
 @Controller()
 export class FeesController {
   constructor(private readonly fees: FeesService) {}
@@ -104,6 +105,7 @@ export class FeesController {
   /** بدء دفع إلكتروني — يعيد رابط بوابة الدفع (زين كاش…) */
   @Post("payments/checkout")
   @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "ACCOUNTANT", "PARENT", "STUDENT")
+  @Feature("ONLINE_PAYMENTS")
   checkout(
     @Body(new ZodPipe(createCheckoutSchema)) dto: CreateCheckoutDto,
     @CurrentUser() user: AuthUser,

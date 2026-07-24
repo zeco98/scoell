@@ -13,6 +13,7 @@ import {
   Settings,
   Users,
   Bus,
+  ToggleLeft,
   type LucideIcon,
 } from "lucide-react";
 
@@ -38,6 +39,7 @@ const ALL: Role[] = [
 export const NAV_ITEMS: NavItem[] = [
   { path: "/dashboard", label: "لوحة المعلومات", icon: LayoutDashboard, roles: ALL },
   { path: "/schools", label: "المدارس والاشتراكات", icon: Building2, roles: ["SUPER_ADMIN"] },
+  { path: "/school-features", label: "ميزات المدارس", icon: ToggleLeft, roles: ["SUPER_ADMIN"] },
   { path: "/admissions", label: "القبول والتسجيل", icon: UserPlus, roles: ["SCHOOL_ADMIN"] },
   { path: "/students", label: "الطلبة", icon: GraduationCap, roles: ["SCHOOL_ADMIN", "ACCOUNTANT", "TEACHER", "PARENT"] },
   { path: "/attendance", label: "الحضور والغياب", icon: CalendarCheck, roles: ["SCHOOL_ADMIN", "TEACHER"] },

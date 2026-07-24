@@ -2,13 +2,14 @@ import { Body, Controller, Get, Post, Query, Req } from "@nestjs/common";
 import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { bulkAttendanceSchema, type BulkAttendanceDto } from "@manarah/shared";
 import type { Request } from "express";
-import { CurrentUser, Roles } from "../common/decorators";
+import { CurrentUser, Feature, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
 import { auditCtx, type AuthUser } from "../common/types";
 import { AttendanceService } from "./attendance.service";
 
 @ApiTags("attendance")
 @ApiBearerAuth()
+@Feature("ATTENDANCE")
 @Controller("attendance")
 export class AttendanceController {
   constructor(private readonly attendance: AttendanceService) {}

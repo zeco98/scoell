@@ -1,7 +1,7 @@
 import { Link, useRouteError } from "react-router";
 import { Button } from "../ui/button";
 import { LogoMark } from "../../brand/Logo";
-import { ShieldOff, Compass, AlertTriangle } from "lucide-react";
+import { ShieldOff, Compass, AlertTriangle, PowerOff } from "lucide-react";
 
 function ErrorShell({
   icon,
@@ -40,6 +40,18 @@ export function Forbidden() {
       code="403"
       title="لا تملك صلاحية الوصول"
       hint="هذه الصفحة خارج صلاحيات دورك الحالي. إن كنت تعتقد أن هذا خطأ، راجع إدارة المؤسسة."
+    />
+  );
+}
+
+/** تُعرض عند فتح مسار مرتبط بميزة معطّلة لمؤسسة المستخدم — بدل ترك مسار ميت */
+export function FeatureDisabled() {
+  return (
+    <ErrorShell
+      icon={<PowerOff size={48} />}
+      code="—"
+      title="الميزة غير مفعّلة"
+      hint="هذه الميزة غير مفعّلة لمؤسستك حاليًا. للاستفسار أو التفعيل تواصل مع إدارة المنصة."
     />
   );
 }

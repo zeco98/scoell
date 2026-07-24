@@ -3,7 +3,7 @@ import { ApiBearerAuth, ApiTags } from "@nestjs/swagger";
 import { upsertExamResultSchema } from "@manarah/shared";
 import type { Request, Response } from "express";
 import { z } from "zod";
-import { CurrentUser, Roles } from "../common/decorators";
+import { CurrentUser, Feature, Roles } from "../common/decorators";
 import { ZodPipe } from "../common/zod.pipe";
 import { auditCtx as ctx, type AuthUser } from "../common/types";
 import { ExamsService } from "./exams.service";
@@ -21,6 +21,7 @@ const upsertRowsSchema = z.object({
 
 @ApiTags("exams")
 @ApiBearerAuth()
+@Feature("EXAMS")
 @Controller("exams")
 export class ExamsController {
   constructor(private readonly exams: ExamsService) {}
@@ -43,12 +44,14 @@ export class ExamsController {
 
   @Get(":id/results")
   @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER", "PARENT", "STUDENT", "AUDITOR")
+  @Feature("GRADES_RESULTS")
   results(@Param("id") id: string, @CurrentUser() user: AuthUser) {
     return this.exams.results(user, id);
   }
 
   @Put(":id/results")
   @Roles("SCHOOL_ADMIN", "TEACHER")
+  @Feature("GRADES_RESULTS")
   upsertResults(
     @Param("id") id: string,
     @Body(new ZodPipe(upsertRowsSchema)) body: z.infer<typeof upsertRowsSchema>,
@@ -65,6 +68,7 @@ export class ExamsController {
 
   @Get(":id/results/:studentId/card")
   @Roles("SUPER_ADMIN", "SCHOOL_ADMIN", "TEACHER", "PARENT", "STUDENT", "AUDITOR")
+  @Feature("GRADES_RESULTS")
   async reportCard(
     @Param("id") id: string,
     @Param("studentId") studentId: string,

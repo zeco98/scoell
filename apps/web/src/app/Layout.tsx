@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { api } from "./lib/api";
 import { useAuth } from "./auth/AuthProvider";
 import { navForRole } from "./data/nav";
+import { useFeature, useFeatureFlags } from "./features/FeatureFlagsProvider";
+import { FEATURE_NAV_MAP } from "./features/featureMap";
 import { LogoFull } from "./brand/Logo";
 import { PageTransition } from "./components/motion";
 import { Button } from "./components/ui/button";
@@ -154,12 +156,18 @@ function GlobalSearch() {
 
 export function Layout() {
   const { user, logout } = useAuth();
+  const { features } = useFeatureFlags();
+  const notificationsEnabled = useFeature("NOTIFICATIONS");
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
 
   if (!user) return null;
-  const items = navForRole(user.role);
+  // إخفاء عناصر القائمة المرتبطة بميزة معطّلة لمؤسسة المستخدم (دفاعي — الحكم الحقيقي في السيرفر)
+  const items = navForRole(user.role).filter((item) => {
+    const key = FEATURE_NAV_MAP[item.path];
+    return !key || features[key];
+  });
 
   async function onLogout() {
     await logout();
@@ -233,7 +241,7 @@ export function Layout() {
             <span className="hidden md:inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-brand-soft text-brand">
               {user.tenantName ?? "المنصة"}
             </span>
-            <NotificationsBell />
+            {notificationsEnabled && <NotificationsBell />}
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" className="gap-2 px-2">
