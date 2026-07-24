@@ -367,19 +367,29 @@ export class FeesService {
     return { ok: true, status: "confirmed", receiptNo: payment.receiptNo, paymentId: payment.id };
   }
 
-  /** إلغاء منطقي — SUPER_ADMIN فقط، بقيد تدقيق حرج. لا حذف نهائي أبدًا. */
-  async voidPayment(user: AuthUser, id: string, reason: string, ctx: AuditContext) {
-    if (user.role !== "SUPER_ADMIN") {
-      throw new ForbiddenException("إلغاء السندات صلاحية المدير العام حصرًا");
-    }
-    // نطاق صريح: SUPER_ADMIN بلا tenant يرى الكل، لكن الاستعلام يبقى ضمن tenantWhere دفاعيًا
-    const payment = await this.prisma.payment.findFirst({
-      where: { id, ...tenantWhere(user) },
-      include: { feeRecord: true },
-    });
-    if (!payment || payment.voidedAt) throw new NotFoundException("السند غير موجود أو ملغى");
+  /**
+   * تنفيذ الإلغاء الفعلي (تأثير الدفتر/السند) — دالة داخلية مشتركة.
+   * تُستدعى فقط من: (أ) SUPER_ADMIN كتجاوز مباشر، (ب) SCHOOL_ADMIN عند الموافقة على طلب إلغاء.
+   * لا يجوز للمحاسب استدعاؤها مباشرة — هو يطلب فقط عبر requestVoid.
+   */
+  private async executeVoid(
+    user: AuthUser,
+    payment: { id: string; tenantId: string; receiptNo: string; amount: number; feeRecordId: string; feeRecord: { paid: number; total: number; dueDate: string } },
+    reason: string,
+    ctx: AuditContext,
+    approval?: { requestedById: string; approvedById: string },
+  ) {
     await this.prisma.$transaction(async (tx) => {
-      await tx.payment.update({ where: { id }, data: { voidedAt: new Date() } });
+      await tx.payment.update({
+        where: { id: payment.id },
+        data: {
+          voidedAt: new Date(),
+          voidStatus: "VOIDED",
+          ...(approval
+            ? { voidApprovedById: approval.approvedById, voidApprovedAt: new Date() }
+            : {}),
+        },
+      });
       const newPaid = payment.feeRecord.paid - payment.amount;
       await tx.feeRecord.update({
         where: { id: payment.feeRecordId },
@@ -389,7 +399,9 @@ export class FeesService {
     await this.audit.log({
       user,
       tenantId: payment.tenantId,
-      action: `إلغاء سند قبض ${payment.receiptNo} — السبب: ${reason}`,
+      action: approval
+        ? `موافقة على إلغاء سند قبض ${payment.receiptNo} (الطلب: ${approval.requestedById}) — السبب: ${reason}`
+        : `إلغاء سند قبض ${payment.receiptNo} — السبب: ${reason}`,
       entity: "Payment",
       entityId: payment.receiptNo,
       before: { amount: payment.amount, voidedAt: null },
@@ -397,7 +409,106 @@ export class FeesService {
       severity: "critical",
       ctx,
     });
-    return { ok: true };
+    return this.prisma.payment.findFirst({
+      where: { id: payment.id },
+      include: { student: { select: { id: true, name: true } } },
+    });
+  }
+
+  /** إلغاء منطقي مباشر — SUPER_ADMIN فقط (تجاوز)، بقيد تدقيق حرج. لا حذف نهائي أبدًا. */
+  async voidPayment(user: AuthUser, id: string, reason: string, ctx: AuditContext) {
+    if (user.role !== "SUPER_ADMIN") {
+      throw new ForbiddenException("إلغاء السندات المباشر صلاحية المدير العام حصرًا");
+    }
+    // نطاق صريح: SUPER_ADMIN بلا tenant يرى الكل، لكن الاستعلام يبقى ضمن tenantWhere دفاعيًا
+    const payment = await this.prisma.payment.findFirst({
+      where: { id, ...tenantWhere(user) },
+      include: { feeRecord: true },
+    });
+    if (!payment || payment.voidedAt) throw new NotFoundException("السند غير موجود أو ملغى");
+    return this.executeVoid(user, payment, reason, ctx);
+  }
+
+  /** طلب إلغاء — ACCOUNTANT فقط. لا يُنفّذ الإلغاء، ينتظر موافقة مدير المدرسة. */
+  async requestVoid(user: AuthUser, id: string, reason: string, ctx: AuditContext) {
+    const payment = await this.prisma.payment.findFirst({ where: { id, ...tenantWhere(user) } });
+    if (!payment) throw new NotFoundException("السند غير موجود");
+    if (payment.voidedAt || payment.voidStatus !== "NONE") {
+      throw new BadRequestException("يوجد طلب إلغاء سابق أو أن السند ملغى بالفعل");
+    }
+    await this.prisma.payment.update({
+      where: { id },
+      data: {
+        voidStatus: "PENDING",
+        voidRequestedById: user.id,
+        voidRequestedAt: new Date(),
+        voidReason: reason,
+      },
+    });
+    await this.audit.log({
+      user,
+      tenantId: payment.tenantId,
+      action: `طلب إلغاء سند قبض ${payment.receiptNo} — بانتظار موافقة مدير المدرسة — السبب: ${reason}`,
+      entity: "Payment",
+      entityId: payment.receiptNo,
+      before: { voidStatus: "NONE" },
+      after: { voidStatus: "PENDING" },
+      severity: "warning",
+      ctx,
+    });
+    return this.prisma.payment.findFirst({
+      where: { id: payment.id },
+      include: { student: { select: { id: true, name: true } } },
+    });
+  }
+
+  /** موافقة على طلب إلغاء — SCHOOL_ADMIN فقط. ينفّذ الإلغاء الفعلي. */
+  async approveVoid(user: AuthUser, id: string, ctx: AuditContext) {
+    const payment = await this.prisma.payment.findFirst({
+      where: { id, ...tenantWhere(user) },
+      include: { feeRecord: true },
+    });
+    if (!payment) throw new NotFoundException("السند غير موجود");
+    if (payment.voidStatus !== "PENDING") {
+      throw new BadRequestException("لا يوجد طلب إلغاء بانتظار الموافقة لهذا السند");
+    }
+    return this.executeVoid(user, payment, payment.voidReason ?? "", ctx, {
+      requestedById: payment.voidRequestedById ?? "",
+      approvedById: user.id,
+    });
+  }
+
+  /** رفض طلب إلغاء — SCHOOL_ADMIN فقط. يعيد الحالة إلى NONE بدون تنفيذ الإلغاء. */
+  async rejectVoid(user: AuthUser, id: string, ctx: AuditContext) {
+    const payment = await this.prisma.payment.findFirst({ where: { id, ...tenantWhere(user) } });
+    if (!payment) throw new NotFoundException("السند غير موجود");
+    if (payment.voidStatus !== "PENDING") {
+      throw new BadRequestException("لا يوجد طلب إلغاء بانتظار الموافقة لهذا السند");
+    }
+    await this.prisma.payment.update({
+      where: { id },
+      data: {
+        voidStatus: "NONE",
+        voidRequestedById: null,
+        voidRequestedAt: null,
+        voidReason: null,
+      },
+    });
+    await this.audit.log({
+      user,
+      tenantId: payment.tenantId,
+      action: `رفض طلب إلغاء سند قبض ${payment.receiptNo}`,
+      entity: "Payment",
+      entityId: payment.receiptNo,
+      before: { voidStatus: "PENDING" },
+      after: { voidStatus: "NONE" },
+      severity: "info",
+      ctx,
+    });
+    return this.prisma.payment.findFirst({
+      where: { id: payment.id },
+      include: { student: { select: { id: true, name: true } } },
+    });
   }
 
   async receiptData(user: AuthUser, id: string) {

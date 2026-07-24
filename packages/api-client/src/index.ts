@@ -235,8 +235,16 @@ export class ManarahClient {
         amount: number;
         gateway: string;
       }>("POST", "/payments/checkout", dto),
+    /** @deprecated طريق الإلغاء المباشر (SUPER_ADMIN فقط) — استُبدل بتدفق طلب/اعتماد الإلغاء أدناه */
     voidPayment: (id: string, reason: string) =>
       this.request<{ ok: boolean }>("POST", `/payments/${id}/void`, { reason }),
+    /** طلب إلغاء دفعة — ACCOUNTANT، يحوّل الحالة إلى PENDING */
+    requestVoid: (id: string, reason: string) =>
+      this.request<PaymentItem>("POST", `/payments/${id}/void-request`, { reason }),
+    /** اعتماد إلغاء دفعة — SCHOOL_ADMIN، ينفّذ الإلغاء ويحوّل الحالة إلى VOIDED */
+    approveVoid: (id: string) => this.request<PaymentItem>("POST", `/payments/${id}/void-approve`),
+    /** رفض طلب إلغاء دفعة — SCHOOL_ADMIN، يعيد الحالة إلى NONE */
+    rejectVoid: (id: string) => this.request<PaymentItem>("POST", `/payments/${id}/void-reject`),
     receiptUrl: (id: string) => this.absoluteUrl(`/payments/${id}/receipt`),
     createDiscount: (dto: { studentId: string; percent: number; reason: string }) =>
       this.request("POST", "/discounts", dto),
@@ -449,6 +457,12 @@ export interface PaymentItem {
   receivedBy: string;
   createdAt: string;
   student?: { id: string; name: string };
+  voidStatus?: "NONE" | "PENDING" | "VOIDED";
+  voidReason?: string | null;
+  voidRequestedAt?: string | null;
+  voidApprovedAt?: string | null;
+  voidRequestedBy?: string | null;
+  voidApprovedBy?: string | null;
 }
 
 export interface AdmissionItem {

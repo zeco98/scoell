@@ -235,7 +235,7 @@ export function Exams() {
   const [selectedExamId, setSelectedExamId] = useState<string>("");
   const [editing, setEditing] = useState(false);
 
-  const canEdit = user?.role === "SCHOOL_ADMIN" || user?.role === "TEACHER";
+  const canEdit = user?.role === "TEACHER";
 
   const { data: exams, isLoading: examsLoading, isError: examsError, error: examsErrObj, refetch: refetchExams } = useQuery({ queryKey: ["exams"], queryFn: () => api.exams.list() });
 

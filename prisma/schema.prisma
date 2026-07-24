@@ -208,6 +208,14 @@ model Payment {
   voidedAt     DateTime? // الإلغاء المنطقي — لا حذف نهائي إلا SUPER_ADMIN
   createdAt    DateTime  @default(now())
 
+  // سير عمل الموافقة على الإلغاء: المحاسب يطلب، مدير المدرسة يوافق/يرفض — NONE|PENDING|VOIDED
+  voidStatus       String    @default("NONE")
+  voidRequestedById String?
+  voidRequestedAt   DateTime?
+  voidReason        String?
+  voidApprovedById  String?
+  voidApprovedAt    DateTime?
+
   tenant    Tenant    @relation(fields: [tenantId], references: [id])
   feeRecord FeeRecord @relation(fields: [feeRecordId], references: [id])
   student   Student   @relation(fields: [studentId], references: [id])

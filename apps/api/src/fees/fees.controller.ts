@@ -61,7 +61,7 @@ export class FeesController {
   }
 
   @Post("fees")
-  @Roles("SCHOOL_ADMIN", "ACCOUNTANT")
+  @Roles("ACCOUNTANT")
   createRecord(
     @Body(new ZodPipe(createFeeRecordSchema)) dto: z.infer<typeof createFeeRecordSchema>,
     @CurrentUser() user: AuthUser,
@@ -92,7 +92,7 @@ export class FeesController {
   }
 
   @Post("payments")
-  @Roles("SCHOOL_ADMIN", "ACCOUNTANT")
+  @Roles("ACCOUNTANT")
   createPayment(
     @Body(new ZodPipe(createPaymentSchema)) dto: CreatePaymentDto,
     @CurrentUser() user: AuthUser,
@@ -128,6 +128,7 @@ export class FeesController {
     return this.fees.confirmCallback(body.providerRef, body.signature, body.outcome);
   }
 
+  /** إلغاء مباشر (تجاوز) — SUPER_ADMIN فقط */
   @Post("payments/:id/void")
   @Roles("SUPER_ADMIN")
   voidPayment(
@@ -137,6 +138,32 @@ export class FeesController {
     @Req() req: Request,
   ) {
     return this.fees.voidPayment(user, id, body.reason, ctx(req));
+  }
+
+  /** طلب إلغاء — ACCOUNTANT فقط، ينتظر موافقة مدير المدرسة */
+  @Post("payments/:id/void-request")
+  @Roles("ACCOUNTANT")
+  requestVoid(
+    @Param("id") id: string,
+    @Body(new ZodPipe(voidPaymentSchema)) body: z.infer<typeof voidPaymentSchema>,
+    @CurrentUser() user: AuthUser,
+    @Req() req: Request,
+  ) {
+    return this.fees.requestVoid(user, id, body.reason, ctx(req));
+  }
+
+  /** موافقة على طلب إلغاء — SCHOOL_ADMIN فقط، ينفّذ الإلغاء الفعلي */
+  @Post("payments/:id/void-approve")
+  @Roles("SCHOOL_ADMIN")
+  approveVoid(@Param("id") id: string, @CurrentUser() user: AuthUser, @Req() req: Request) {
+    return this.fees.approveVoid(user, id, ctx(req));
+  }
+
+  /** رفض طلب إلغاء — SCHOOL_ADMIN فقط */
+  @Post("payments/:id/void-reject")
+  @Roles("SCHOOL_ADMIN")
+  rejectVoid(@Param("id") id: string, @CurrentUser() user: AuthUser, @Req() req: Request) {
+    return this.fees.rejectVoid(user, id, ctx(req));
   }
 
   /** سند القبض بصيغة قابلة للطباعة (A5، هوية منارة) — window.print() في العميل يخرجه PDF/طابعة */
@@ -152,7 +179,7 @@ export class FeesController {
   }
 
   @Post("discounts")
-  @Roles("SCHOOL_ADMIN", "ACCOUNTANT")
+  @Roles("ACCOUNTANT")
   createDiscount(
     @Body(new ZodPipe(discountSchema)) dto: z.infer<typeof discountSchema>,
     @CurrentUser() user: AuthUser,

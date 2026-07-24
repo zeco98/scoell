@@ -23,10 +23,12 @@ import { Button } from "../ui/button";
 import { Input } from "../ui/input";
 import { Progress } from "../ui/progress";
 import { Skeleton } from "../ui/skeleton";
+import { Badge } from "../ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "../ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "../ui/table";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "../ui/dialog";
-import { Wallet, AlertTriangle, TrendingUp, Receipt, Plus, Printer, Loader2, BellRing, Percent, Smartphone } from "lucide-react";
+import { Wallet, AlertTriangle, TrendingUp, Receipt, Plus, Printer, Loader2, BellRing, Percent, Smartphone, Ban, ShieldCheck, XCircle } from "lucide-react";
+import type { PaymentItem } from "@manarah/api-client";
 
 function prefersReducedMotion() {
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -334,6 +336,13 @@ export function Fees() {
   const [recordsFilter, setRecordsFilter] = useState("all");
 
   const canManage = user?.role === "SCHOOL_ADMIN" || user?.role === "ACCOUNTANT";
+  // إنشاء قسط/سند قبض/خصم / طلب إلغاء سند → للمحاسب حصرًا (القراءة والتذكيرات تبقى متاحة للإدارة)
+  const canAct = user?.role === "ACCOUNTANT";
+  // اعتماد/رفض طلبات إلغاء السندات → للمدير حصرًا
+  const isAdmin = user?.role === "SCHOOL_ADMIN";
+
+  const [voidRequesting, setVoidRequesting] = useState<PaymentItem | null>(null);
+  const [voidReason, setVoidReason] = useState("");
 
   const { data: stats } = useQuery({
     queryKey: ["fees", "stats"],
@@ -364,6 +373,41 @@ export function Fees() {
     onError: (e) => toast.error(e instanceof Error ? e.message : "فشل إرسال التذكير"),
   });
 
+  function refreshPayments() {
+    qc.invalidateQueries({ queryKey: ["payments"] });
+    qc.invalidateQueries({ queryKey: ["fees"] });
+    qc.invalidateQueries({ queryKey: ["dashboard"] });
+  }
+
+  const requestVoid = useMutation({
+    mutationFn: ({ id, reason }: { id: string; reason: string }) => api.fees.requestVoid(id, reason),
+    onSuccess: (p) => {
+      refreshPayments();
+      toast.success(`أُرسل طلب إلغاء السند ${p.receiptNo}`, { description: "بانتظار اعتماد الإدارة." });
+      setVoidRequesting(null);
+      setVoidReason("");
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "فشل إرسال طلب الإلغاء"),
+  });
+
+  const approveVoid = useMutation({
+    mutationFn: (id: string) => api.fees.approveVoid(id),
+    onSuccess: (p) => {
+      refreshPayments();
+      toast.success(`أُلغي السند ${p.receiptNo}`, { description: "سُجّلت العملية في التدقيق." });
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "فشل اعتماد الإلغاء"),
+  });
+
+  const rejectVoid = useMutation({
+    mutationFn: (id: string) => api.fees.rejectVoid(id),
+    onSuccess: (p) => {
+      refreshPayments();
+      toast.success(`رُفض طلب إلغاء السند ${p.receiptNo}`);
+    },
+    onError: (e) => toast.error(e instanceof Error ? e.message : "فشل رفض طلب الإلغاء"),
+  });
+
   const overdue = (records?.items ?? []).filter((f) => f.status === "overdue");
 
   return (
@@ -372,7 +416,7 @@ export function Fees() {
         title="الرسوم والمالية"
         subtitle="خطط الرسوم، الأقساط، السندات، ومتابعة الديون"
         action={
-          canManage && (
+          canAct && (
             <>
               <Button variant="outline" className="gap-2" onClick={() => setFeeOpen(true)}>
                 <Plus size={16} /> قسط جديد
@@ -479,6 +523,7 @@ export function Fees() {
                       <TableHead className="text-right">الطريقة</TableHead>
                       <TableHead className="text-right">التاريخ</TableHead>
                       <TableHead className="text-right">المحصِّل</TableHead>
+                      <TableHead className="text-right">الحالة</TableHead>
                       <TableHead className="text-right"></TableHead>
                     </TableRow>
                   </TableHeader>
@@ -492,9 +537,58 @@ export function Fees() {
                         <TableCell dir="ltr">{new Date(p.createdAt).toLocaleDateString("ar-IQ-u-nu-latn")}</TableCell>
                         <TableCell>{p.receivedBy}</TableCell>
                         <TableCell>
-                          <Button size="sm" variant="ghost" className="gap-1" onClick={() => window.open(api.fees.receiptUrl(p.id), "_blank")}>
-                            <Printer size={15} /> طباعة
-                          </Button>
+                          {p.voidStatus === "VOIDED" && (
+                            <Badge variant="outline" className="rounded-full bg-destructive/12 text-destructive border-destructive/20 gap-1">
+                              <Ban size={13} /> ملغاة
+                            </Badge>
+                          )}
+                          {p.voidStatus === "PENDING" && (
+                            <div className="flex flex-col gap-0.5">
+                              <Badge variant="outline" className="rounded-full bg-warning/12 text-warning border-warning/20 gap-1 w-fit">
+                                <XCircle size={13} /> بانتظار اعتماد الإلغاء
+                              </Badge>
+                              {p.voidReason && <span className="text-muted-foreground">السبب: {p.voidReason}</span>}
+                            </div>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1 flex-wrap">
+                            <Button size="sm" variant="ghost" className="gap-1" onClick={() => window.open(api.fees.receiptUrl(p.id), "_blank")}>
+                              <Printer size={15} /> طباعة
+                            </Button>
+                            {canAct && (!p.voidStatus || p.voidStatus === "NONE") && (
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="gap-1 text-destructive"
+                                onClick={() => { setVoidRequesting(p); setVoidReason(""); }}
+                              >
+                                <Ban size={15} /> طلب إلغاء
+                              </Button>
+                            )}
+                            {isAdmin && p.voidStatus === "PENDING" && (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="gap-1 text-success"
+                                  disabled={approveVoid.isPending}
+                                  onClick={() => approveVoid.mutate(p.id)}
+                                >
+                                  <ShieldCheck size={15} /> اعتماد الإلغاء
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="gap-1"
+                                  disabled={rejectVoid.isPending}
+                                  onClick={() => rejectVoid.mutate(p.id)}
+                                >
+                                  <XCircle size={15} /> رفض
+                                </Button>
+                              </>
+                            )}
+                          </div>
                         </TableCell>
                       </TableRow>
                     ))}
@@ -537,6 +631,28 @@ export function Fees() {
       <NewPaymentDialog open={payOpen} onClose={() => setPayOpen(false)} />
       <DiscountDialog open={discountOpen} onClose={() => setDiscountOpen(false)} />
       <NewFeeRecordDialog open={feeOpen} onClose={() => setFeeOpen(false)} />
+
+      {/* طلب إلغاء سند — سبب إلزامي (3 أحرف على الأقل)، يُحوَّل لاعتماد الإدارة */}
+      <Dialog open={!!voidRequesting} onOpenChange={(o) => { if (!o) { setVoidRequesting(null); setVoidReason(""); } }}>
+        <DialogContent className="sm:max-w-sm" dir="rtl">
+          <DialogHeader className="text-right">
+            <DialogTitle>طلب إلغاء السند {voidRequesting?.receiptNo}</DialogTitle>
+            <DialogDescription>يحتاج الطلب اعتماد مدير المدرسة قبل تنفيذ الإلغاء فعليًا.</DialogDescription>
+          </DialogHeader>
+          <Input placeholder="سبب طلب الإلغاء (3 أحرف على الأقل)..." value={voidReason} onChange={(e) => setVoidReason(e.target.value)} />
+          <Button
+            variant="destructive"
+            className="w-full gap-2"
+            disabled={voidReason.trim().length < 3 || requestVoid.isPending}
+            onClick={() => {
+              if (voidRequesting) requestVoid.mutate({ id: voidRequesting.id, reason: voidReason.trim() });
+            }}
+          >
+            {requestVoid.isPending ? <Loader2 size={16} className="animate-spin" /> : <Ban size={16} />}
+            إرسال طلب الإلغاء
+          </Button>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

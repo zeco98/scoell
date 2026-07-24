@@ -33,7 +33,7 @@ export class ExamsController {
   }
 
   @Post()
-  @Roles("SCHOOL_ADMIN", "TEACHER")
+  @Roles("TEACHER")
   create(
     @Body(new ZodPipe(createExamSchema)) dto: z.infer<typeof createExamSchema>,
     @CurrentUser() user: AuthUser,
@@ -50,7 +50,7 @@ export class ExamsController {
   }
 
   @Put(":id/results")
-  @Roles("SCHOOL_ADMIN", "TEACHER")
+  @Roles("TEACHER")
   @Feature("GRADES_RESULTS")
   upsertResults(
     @Param("id") id: string,

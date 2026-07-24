@@ -50,12 +50,9 @@ export class AttendanceService {
     };
   }
 
-  /** حفظ جماعي — تحضير اليوم للمعلم؛ بأثر رجعي لمدير المدرسة فقط */
+  /** حفظ جماعي — يملك المعلم تحضير شعبته بالكامل، بما فيه التحضير بأثر رجعي */
   async saveBulk(user: AuthUser, dto: BulkAttendanceDto, ctx: AuditContext) {
     const tenantId = requireTenant(user);
-    if (dto.date !== today() && user.role === "TEACHER") {
-      throw new ForbiddenException("التحضير بأثر رجعي يتطلب صلاحية مدير المدرسة");
-    }
     const section = await this.prisma.section.findFirst({
       where: { id: dto.sectionId, tenantId },
     });

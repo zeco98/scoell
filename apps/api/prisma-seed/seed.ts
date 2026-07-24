@@ -9,9 +9,10 @@ import * as argon2 from "argon2";
 const prisma = new PrismaClient();
 
 const PASSWORD = process.env.SEED_PASSWORD || "Manarah@2026";
-// في الإنتاج: SEED_FORCE_PASSWORD_CHANGE=true يُجبر كل حساب seed على تغيير كلمة
-// المرور عند أول دخول. يبقى false في التطوير للحفاظ على سلاسة العرض التجريبي.
-const FORCE_CHANGE = process.env.SEED_FORCE_PASSWORD_CHANGE === "true";
+// في الإنتاج (NODE_ENV=production): يُجبر كل حساب seed على تغيير كلمة المرور
+// عند أول دخول. يبقى false في التطوير للحفاظ على سلاسة الدخول السريع التجريبي.
+const IS_PRODUCTION = process.env.NODE_ENV === "production";
+const FORCE_CHANGE = IS_PRODUCTION;
 
 // --- بيانات mock.ts الأصلية ---
 const SCHOOLS = [
@@ -304,7 +305,11 @@ async function main() {
   console.log("✅ اكتمل الـ seed:");
   console.log(`   5 مؤسسات · 9 مستخدمين (كل الأدوار) · 36 طالبًا · 12 طلب قبول`);
   console.log(`   20 قسطًا · 14 سند قبض · تحضير اليوم · امتحان بـ16 نتيجة`);
-  console.log(`   كلمة مرور جميع الحسابات: ${PASSWORD}`);
+  if (IS_PRODUCTION) {
+    console.log("   كلمة مرور الحسابات: محددة عبر SEED_PASSWORD (لن تُطبع في الإنتاج)");
+  } else {
+    console.log(`   كلمة مرور جميع الحسابات: ${PASSWORD}`);
+  }
 }
 
 main()

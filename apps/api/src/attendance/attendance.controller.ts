@@ -25,7 +25,7 @@ export class AttendanceController {
   }
 
   @Post("bulk")
-  @Roles("SCHOOL_ADMIN", "TEACHER")
+  @Roles("TEACHER")
   saveBulk(
     @Body(new ZodPipe(bulkAttendanceSchema)) dto: BulkAttendanceDto,
     @CurrentUser() user: AuthUser,
